@@ -1,0 +1,158 @@
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 基础样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Rajdhani', sans-serif;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-text-muted);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* 选中文本样式 */
+::selection {
+  background-color: rgba(245, 158, 11, 0.3);
+  color: var(--color-text-primary);
+}
+
+/* 链接样式 */
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-accent-hover);
+}
+
+/* 按钮基础样式 */
+button {
+  cursor: pointer;
+  border: none;
+  outline: none;
+  font-family: inherit;
+}
+
+/* 输入框基础样式 */
+input, select, textarea {
+  font-family: inherit;
+  outline: none;
+}
+
+/* 游戏字体样式 */
+.font-gaming {
+  font-family: var(--font-gaming);
+  letter-spacing: 0.05em;
+}
+
+/* 发光效果 */
+.glow-accent {
+  box-shadow: var(--shadow-glow);
+}
+
+.glow-neon {
+  box-shadow: var(--shadow-neon);
+}
+
+/* 渐变背景 */
+.gradient-surface {
+  background: linear-gradient(135deg, var(--color-bg-surface) 0%, var(--color-bg-secondary) 100%);
+}
+
+/* 动画 */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(245, 158, 11, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.8);
+  }
+}
+
+@keyframes slide-up {
+  0% {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* 工具类 */
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* 禁用状态 */
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
