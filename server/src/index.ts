@@ -2,6 +2,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import cors from 'cors';
 import { config } from './config';
 import { authRouter } from './routes/auth';
+import { settingsRouter } from './routes/settings';
 import { redis } from './redis';
 
 const app = express();
@@ -32,6 +33,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/settings', settingsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -102,6 +102,11 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'settings.sound': 'Sound Settings',
     'settings.sound.enable': 'Enable Sound',
     'settings.sound.volume': 'Volume',
+    'settings.synced': 'Synced',
+    'settings.syncing': 'Saving...',
+    'settings.syncError': 'Sync failed',
+    'settings.saveToCloud': 'Save to Cloud',
+    'settings.loadFromCloud': 'Load from Cloud',
 
     // Theme
     'theme.title': '主题',
@@ -261,6 +266,11 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'settings.sound': '音效设置',
     'settings.sound.enable': '启用音效',
     'settings.sound.volume': '音量',
+    'settings.synced': '已同步',
+    'settings.syncing': '保存中...',
+    'settings.syncError': '同步失败',
+    'settings.saveToCloud': '保存到云端',
+    'settings.loadFromCloud': '从云端加载',
 
     // Theme
     'theme.title': '主题',
