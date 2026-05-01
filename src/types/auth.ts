@@ -14,7 +14,7 @@ export interface AuthResponse {
 
 export interface SendCodeRequest {
   email: string;
-  purpose: 'login' | 'register';
+  purpose: 'login' | 'register' | 'reset';
 }
 
 export interface RegisterRequest {
@@ -26,4 +26,10 @@ export interface RegisterRequest {
 export interface LoginRequest {
   email: string;
   code: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  code: string;
+  password: string;
 }

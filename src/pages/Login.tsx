@@ -130,11 +130,10 @@ export function Login() {
           </Button>
         </form>
 
-        {/* Link to register */}
+        {/* Link to forgot password */}
         <p className="mt-6 text-center text-sm text-text-muted">
-          {locale['auth.noAccount']}{' '}
-          <Link to="/register" className="text-accent hover:text-accent-dark font-medium">
-            {locale['auth.register']}
+          <Link to="/forgot-password" className="text-accent hover:text-accent-dark font-medium">
+            {locale['auth.forgotPassword']}
           </Link>
         </p>
       </Card>

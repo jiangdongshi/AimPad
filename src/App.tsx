@@ -7,6 +7,7 @@ import { Statistics } from '@/pages/Statistics';
 import { Settings } from '@/pages/Settings';
 import { Login } from '@/pages/Login';
 import { Register } from '@/pages/Register';
+import { ForgotPassword } from '@/pages/ForgotPassword';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -31,6 +32,7 @@ function AppInner() {
           <Route path="settings" element={<Settings />} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
+          <Route path="forgot-password" element={<ForgotPassword />} />
         </Route>
       </Routes>
     </Router>

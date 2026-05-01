@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { AuthResponse, SendCodeRequest, RegisterRequest, LoginRequest, User } from '@/types/auth';
+import type { AuthResponse, SendCodeRequest, RegisterRequest, LoginRequest, ResetPasswordRequest, User } from '@/types/auth';
 
 export const authApi = {
   sendCode: (data: SendCodeRequest) =>
@@ -10,6 +10,9 @@ export const authApi = {
 
   login: (data: LoginRequest) =>
     api.post<AuthResponse>('/auth/login', data),
+
+  resetPassword: (data: ResetPasswordRequest) =>
+    api.post<{ success: boolean; message: string }>('/auth/reset-password', data),
 
   me: () =>
     api.get<{ user: User; settings: Record<string, unknown> }>('/auth/me'),
