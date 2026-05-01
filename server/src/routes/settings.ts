@@ -46,7 +46,7 @@ settingsRouter.put('/', requireAuth, async (req: AuthRequest, res: Response) => 
     ];
 
     const updates: string[] = [];
-    const values: unknown[] = [];
+    const values: (string | number | boolean | null)[] = [];
 
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
