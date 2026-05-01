@@ -12,7 +12,8 @@ interface AuthState {
 
   login: (email: string, code: string) => Promise<void>;
   register: (email: string, code: string, username: string) => Promise<void>;
-  sendCode: (email: string, purpose: 'login' | 'register') => Promise<void>;
+  sendCode: (email: string, purpose: 'login' | 'register' | 'reset') => Promise<void>;
+  resetPassword: (email: string, code: string, password: string) => Promise<void>;
   logout: () => void;
   fetchUser: () => Promise<void>;
   clearError: () => void;
@@ -54,6 +55,17 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { token, user } = await authApi.login({ email, code });
           set({ token, user, isAuthenticated: true, isLoading: false });
+        } catch (err) {
+          set({ isLoading: false, error: (err as Error).message });
+          throw err;
+        }
+      },
+
+      resetPassword: async (email, code, password) => {
+        set({ isLoading: true, error: null });
+        try {
+          await authApi.resetPassword({ email, code, password });
+          set({ isLoading: false });
         } catch (err) {
           set({ isLoading: false, error: (err as Error).message });
           throw err;

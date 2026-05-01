@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import jwt, { type SignOptions } from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { pool } from '../db';
 import { redis } from '../redis';
 import { config } from '../config';
@@ -16,7 +17,7 @@ authRouter.post('/send-code', async (req: AuthRequest, res: Response) => {
     if (!email || !purpose) {
       return res.status(400).json({ error: '邮箱和用途不能为空' });
     }
-    if (!['login', 'register'].includes(purpose)) {
+    if (!['login', 'register', 'reset'].includes(purpose)) {
       return res.status(400).json({ error: '用途必须是 login 或 register' });
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -186,6 +187,55 @@ authRouter.post('/login', async (req: AuthRequest, res: Response) => {
     });
   } catch (err) {
     console.error('[login error]', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// POST /api/auth/reset-password — 重置密码
+authRouter.post('/reset-password', async (req: AuthRequest, res: Response) => {
+  try {
+    const { email, code, password } = req.body;
+
+    if (!email || !code || !password) {
+      return res.status(400).json({ error: '邮箱、验证码和新密码不能为空' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: '密码至少需要 6 个字符' });
+    }
+
+    // 验证码校验
+    const codeKey = `verify:${email}:reset`;
+    const storedCode = await redis.get(codeKey);
+    if (!storedCode || storedCode !== code) {
+      return res.status(400).json({ error: '验证码错误或已过期' });
+    }
+
+    // 检查用户是否存在
+    const [users] = await pool.execute<RowDataPacket[]>(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
+    );
+    if (users.length === 0) {
+      return res.status(404).json({ error: '该邮箱未注册' });
+    }
+
+    // 更新密码
+    const passwordHash = await bcrypt.hash(password, 10);
+    await pool.execute(
+      'UPDATE users SET password_hash = ? WHERE email = ?',
+      [passwordHash, email]
+    );
+
+    // 标记验证码已使用
+    await redis.del(codeKey);
+    await pool.execute(
+      'UPDATE verification_codes SET used = 1 WHERE email = ? AND purpose = ? AND used = 0 ORDER BY id DESC LIMIT 1',
+      [email, 'reset']
+    );
+
+    res.json({ success: true, message: '密码重置成功' });
+  } catch (err) {
+    console.error('[reset-password error]', err);
     res.status(500).json({ error: '服务器内部错误' });
   }
 });

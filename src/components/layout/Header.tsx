@@ -53,20 +53,12 @@ export function Header() {
           {isAuthenticated && user ? (
             <UserMenu user={user} onLogout={logout} />
           ) : (
-            <div className="flex items-center gap-2">
-              <Link
-                to="/login"
-                className="px-3 py-1.5 rounded-md text-sm font-display text-text-secondary hover:text-text-primary hover:bg-surface-700 transition-colors"
-              >
-                {locale['auth.login']}
-              </Link>
-              <Link
-                to="/register"
-                className="px-3 py-1.5 rounded-md text-sm font-display bg-accent hover:bg-accent-dark text-surface-900 font-semibold transition-colors"
-              >
-                {locale['auth.register']}
-              </Link>
-            </div>
+            <Link
+              to="/login"
+              className="px-3 py-1.5 rounded-md text-sm font-display bg-accent hover:bg-accent-dark text-surface-900 font-semibold transition-colors"
+            >
+              {locale['auth.login']}
+            </Link>
           )}
 
           <LanguageSwitcher />
