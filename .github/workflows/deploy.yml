@@ -7,11 +7,12 @@ on:
 
 env:
   REGISTRY: swr.cn-north-4.myhuaweicloud.com
-  IMAGE_NAME: aimpad/aimpad
+  FRONTEND_IMAGE: aimpad/aimpad
+  API_IMAGE: aimpad/api
 
 jobs:
   # ============================================
-  # Job 1: 构建并推送 Docker 镜像到华为云 SWR
+  # Job 1: 构建并推送前端 + API Docker 镜像到华为云 SWR
   # ============================================
   build-and-push:
     runs-on: ubuntu-latest
@@ -35,16 +36,25 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Extract metadata
+      - name: Extract metadata (frontend)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest
 
-      - name: Build and push
+      - name: Extract metadata (API)
+        id: meta-api
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.API_IMAGE }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -52,8 +62,19 @@ jobs:
           provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Build and push API
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          push: true
+          provenance: false
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
 
   # ============================================
   # Job 2: 更新 GitOps 仓库中的镜像 tag
@@ -69,12 +90,15 @@ jobs:
         with:
           token: ${{ secrets.GITOPS_REPO_TOKEN }}
 
-      - name: Update image tag in docker-compose.yml
+      - name: Update image tags in docker-compose.yml
         run: |
           NEW_TAG="${{ needs.build-and-push.outputs.image_tag }}"
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          sed -i "s|${IMAGE}:[^ ]*|${IMAGE}:${NEW_TAG}|g" docker-compose.yml
-          echo "Updated image tag to: ${IMAGE}:${NEW_TAG}"
+          FRONTEND="${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}"
+          API="${{ env.REGISTRY }}/${{ env.API_IMAGE }}"
+          sed -i "s|${FRONTEND}:[^ ]*|${FRONTEND}:${NEW_TAG}|g" docker-compose.yml
+          sed -i "s|${API}:[^ ]*|${API}:${NEW_TAG}|g" docker-compose.yml
+          echo "Updated frontend tag to: ${FRONTEND}:${NEW_TAG}"
+          echo "Updated API tag to: ${API}:${NEW_TAG}"
 
       - name: Commit and push
         run: |
@@ -82,5 +106,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docker-compose.yml
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore: update image tag to ${{ needs.build-and-push.outputs.image_tag }}"
+          git commit -m "chore: update image tags to ${{ needs.build-and-push.outputs.image_tag }}"
           git push

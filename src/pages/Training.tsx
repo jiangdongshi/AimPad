@@ -9,12 +9,14 @@ import { Crosshair } from '@/components/hud/Crosshair';
 import { TrainingHUD } from '@/components/hud/TrainingHUD';
 import { TrainingResultPanel } from '@/components/hud/TrainingResultPanel';
 import { useGameStore } from '@/stores/gameStore';
+import { useLocale } from '@/hooks/useTheme';
 
 export function Training() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const taskId = searchParams.get('task');
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const locale = useLocale();
 
   const {
     status,
@@ -29,7 +31,6 @@ export function Training() {
 
   const { hits, misses, score, fps } = useGameStore();
 
-  // 查找选中的任务
   const selectedTask = taskId
     ? TRAINING_TASKS.find(t => t.id === taskId)
     : null;
@@ -53,7 +54,6 @@ export function Training() {
     navigate('/training');
   }, [resetTraining, navigate]);
 
-  // 自动开始训练（如果有任务参数）
   useEffect(() => {
     if (selectedTask && status === 'idle' && canvasRef.current) {
       handleStart(selectedTask);
@@ -66,7 +66,7 @@ export function Training() {
       {status === 'idle' && !selectedTask && (
         <div className="max-w-7xl mx-auto px-4 py-8">
           <h1 className="text-3xl font-gaming text-text-primary mb-8">
-            Choose a Task
+            {locale['training.chooseTask']}
           </h1>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {TRAINING_TASKS.map((task) => (
@@ -80,23 +80,23 @@ export function Training() {
                       task.difficulty === 'advanced' ? 'bg-danger/20 text-danger' :
                       'bg-primary-500/20 text-primary-400'}
                   `}>
-                    {task.difficulty}
+                    {locale[`difficulty.${task.difficulty}` as keyof typeof locale]}
                   </span>
                 </div>
                 <p className="text-text-secondary mb-4">{task.description}</p>
                 <div className="flex items-center gap-4 text-sm text-text-muted mb-4">
-                  <span className="capitalize">{task.type}</span>
+                  <span>{locale[`taskType.${task.type}` as keyof typeof locale]}</span>
                   <span>·</span>
                   <span>{task.duration / 1000}s</span>
                   <span>·</span>
-                  <span>{task.parameters.targetCount} targets</span>
+                  <span>{task.parameters.targetCount} {locale['training.targets']}</span>
                 </div>
                 <Button
                   variant="primary"
                   className="w-full"
                   onClick={() => handleStart(task)}
                 >
-                  Start
+                  {locale['training.start']}
                 </Button>
               </Card>
             ))}
@@ -125,13 +125,13 @@ export function Training() {
           {status === 'paused' && (
             <div className="fixed inset-0 bg-surface-900/80 flex items-center justify-center z-50">
               <div className="text-center">
-                <h2 className="text-3xl font-gaming text-accent mb-8">Paused</h2>
+                <h2 className="text-3xl font-gaming text-accent mb-8">{locale['training.paused']}</h2>
                 <div className="flex gap-4">
                   <Button variant="secondary" onClick={handleBack}>
-                    Quit
+                    {locale['training.quit']}
                   </Button>
                   <Button variant="primary" onClick={resumeTraining}>
-                    Resume
+                    {locale['training.resume']}
                   </Button>
                 </div>
               </div>
@@ -146,7 +146,7 @@ export function Training() {
               onClick={pauseTraining}
               className="opacity-50 hover:opacity-100"
             >
-              ESC to Pause
+              {locale['training.escPause']}
             </Button>
           </div>
         </>
