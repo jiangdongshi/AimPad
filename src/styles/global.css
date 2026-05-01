@@ -1,4 +1,5 @@
 @import './tokens.css';
+@import './themes.css';
 
 @tailwind base;
 @tailwind components;
@@ -46,8 +47,8 @@ body {
 
 /* 选中文本样式 */
 ::selection {
-  background-color: rgba(245, 158, 11, 0.3);
-  color: var(--color-text-primary);
+  background-color: var(--color-accent);
+  color: var(--color-bg-primary);
 }
 
 /* 链接样式 */

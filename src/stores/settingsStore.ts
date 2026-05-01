@@ -1,7 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { ThemeId } from '@/types/theme';
+
+export type LocaleId = 'en' | 'zh';
 
 interface SettingsState {
+  // 主题设置
+  theme: ThemeId;
+
+  // 语言设置
+  locale: LocaleId;
+
   // 手柄设置
   gamepadDeadzone: number;
   gamepadSensitivity: number;
@@ -28,6 +37,8 @@ interface SettingsState {
 }
 
 const DEFAULT_SETTINGS = {
+  theme: 'default' as ThemeId,
+  locale: 'en' as LocaleId,
   gamepadDeadzone: 0.1,
   gamepadSensitivity: 1.0,
   gamepadInvertY: false,

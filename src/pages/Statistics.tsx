@@ -4,18 +4,20 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useStatistics, useTaskStats } from '@/hooks/useStatistics';
 import { TRAINING_TASKS } from '@/types/training';
+import { useLocale } from '@/hooks/useTheme';
 
 export function Statistics() {
   const [selectedTask, setSelectedTask] = useState<string | undefined>();
   const { stats, loading, refresh } = useStatistics(selectedTask);
   const { taskStats, loading: taskLoading } = useTaskStats();
+  const locale = useLocale();
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-gaming text-text-primary">Statistics</h1>
+        <h1 className="text-3xl font-gaming text-text-primary">{locale['stats.title']}</h1>
         <Button variant="ghost" size="sm" onClick={refresh}>
-          Refresh
+          {locale['stats.refresh']}
         </Button>
       </div>
 
@@ -29,7 +31,7 @@ export function Statistics() {
           }`}
           onClick={() => setSelectedTask(undefined)}
         >
-          All Tasks
+          {locale['stats.allTasks']}
         </button>
         {TRAINING_TASKS.map((task) => (
           <button
@@ -50,7 +52,7 @@ export function Statistics() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardContent className="text-center p-6">
-            <div className="text-sm text-text-secondary mb-2">Total Sessions</div>
+            <div className="text-sm text-text-secondary mb-2">{locale['stats.totalSessions']}</div>
             <div className="text-4xl font-gaming text-text-primary">
               {loading ? '-' : stats?.totalSessions || 0}
             </div>
@@ -58,7 +60,7 @@ export function Statistics() {
         </Card>
         <Card>
           <CardContent className="text-center p-6">
-            <div className="text-sm text-text-secondary mb-2">Best Score</div>
+            <div className="text-sm text-text-secondary mb-2">{locale['stats.bestScore']}</div>
             <div className="text-4xl font-gaming text-accent">
               {loading ? '-' : stats?.bestScore?.toLocaleString() || 0}
             </div>
@@ -66,7 +68,7 @@ export function Statistics() {
         </Card>
         <Card>
           <CardContent className="text-center p-6">
-            <div className="text-sm text-text-secondary mb-2">Average Score</div>
+            <div className="text-sm text-text-secondary mb-2">{locale['stats.averageScore']}</div>
             <div className="text-4xl font-gaming text-text-primary">
               {loading ? '-' : stats?.averageScore?.toLocaleString() || 0}
             </div>
@@ -74,7 +76,7 @@ export function Statistics() {
         </Card>
         <Card>
           <CardContent className="text-center p-6">
-            <div className="text-sm text-text-secondary mb-2">Trend</div>
+            <div className="text-sm text-text-secondary mb-2">{locale['stats.trend']}</div>
             <div className={`text-4xl font-gaming ${
               !stats?.improvementTrend ? 'text-text-primary' :
               stats.improvementTrend > 0 ? 'text-success' : 'text-danger'
@@ -94,29 +96,29 @@ export function Statistics() {
         {/* 性能指标 */}
         <Card>
           <CardHeader>
-            <CardTitle>Performance Metrics</CardTitle>
+            <CardTitle>{locale['stats.performanceMetrics']}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="text-center text-text-muted py-8">Loading...</div>
+              <div className="text-center text-text-muted py-8">{locale['stats.loading']}</div>
             ) : stats ? (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-text-secondary">Average Accuracy</span>
+                  <span className="text-text-secondary">{locale['stats.averageAccuracy']}</span>
                   <span className="font-gaming text-success">{stats.averageAccuracy}%</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-text-secondary">Average Reaction Time</span>
+                  <span className="text-text-secondary">{locale['stats.averageReactionTime']}</span>
                   <span className="font-gaming text-primary-400">{stats.averageReactionTime}ms</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-text-secondary">Best Score</span>
+                  <span className="text-text-secondary">{locale['stats.bestScore']}</span>
                   <span className="font-gaming text-accent">{stats.bestScore.toLocaleString()}</span>
                 </div>
               </div>
             ) : (
               <div className="text-center text-text-muted py-8">
-                No data available. Start training to see your stats!
+                {locale['stats.noData']}
               </div>
             )}
           </CardContent>
@@ -125,11 +127,11 @@ export function Statistics() {
         {/* 最近成绩趋势 */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Scores</CardTitle>
+            <CardTitle>{locale['stats.recentScores']}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="text-center text-text-muted py-8">Loading...</div>
+              <div className="text-center text-text-muted py-8">{locale['stats.loading']}</div>
             ) : stats?.recentScores && stats.recentScores.length > 0 ? (
               <div className="h-48 flex items-end gap-1">
                 {stats.recentScores.map((score, index) => {
@@ -147,7 +149,7 @@ export function Statistics() {
               </div>
             ) : (
               <div className="text-center text-text-muted py-8">
-                No recent scores
+                {locale['stats.noRecentScores']}
               </div>
             )}
           </CardContent>
@@ -156,21 +158,21 @@ export function Statistics() {
         {/* 任务统计 */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Task Statistics</CardTitle>
+            <CardTitle>{locale['stats.taskStatistics']}</CardTitle>
           </CardHeader>
           <CardContent>
             {taskLoading ? (
-              <div className="text-center text-text-muted py-8">Loading...</div>
+              <div className="text-center text-text-muted py-8">{locale['stats.loading']}</div>
             ) : taskStats.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="text-left text-text-secondary text-sm border-b border-surface-600">
-                      <th className="pb-3 pr-4">Task</th>
-                      <th className="pb-3 pr-4">Sessions</th>
-                      <th className="pb-3 pr-4">Best Score</th>
-                      <th className="pb-3 pr-4">Avg Score</th>
-                      <th className="pb-3">Accuracy</th>
+                      <th className="pb-3 pr-4">{locale['stats.table.task']}</th>
+                      <th className="pb-3 pr-4">{locale['stats.table.sessions']}</th>
+                      <th className="pb-3 pr-4">{locale['stats.table.bestScore']}</th>
+                      <th className="pb-3 pr-4">{locale['stats.table.avgScore']}</th>
+                      <th className="pb-3">{locale['stats.table.accuracy']}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -197,7 +199,7 @@ export function Statistics() {
               </div>
             ) : (
               <div className="text-center text-text-muted py-8">
-                No task data available
+                {locale['stats.noTaskData']}
               </div>
             )}
           </CardContent>
