@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types/auth';
 import { authApi } from '@/api/auth';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 interface AuthState {
   token: string | null;
@@ -44,6 +45,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { token, user } = await authApi.register({ email, code, username });
           set({ token, user, isAuthenticated: true, isLoading: false });
+          // 注册后将当前本地设置同步到服务器
+          useSettingsStore.getState().syncToServer();
         } catch (err) {
           set({ isLoading: false, error: (err as Error).message });
           throw err;
@@ -55,6 +58,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { token, user } = await authApi.login({ email, code });
           set({ token, user, isAuthenticated: true, isLoading: false });
+          // 登录后从服务器加载用户设置
+          useSettingsStore.getState().loadFromServer();
         } catch (err) {
           set({ isLoading: false, error: (err as Error).message });
           throw err;
@@ -82,6 +87,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user } = await authApi.me();
           set({ user, isAuthenticated: true });
+          // 同时从服务器加载用户设置
+          useSettingsStore.getState().loadFromServer();
         } catch {
           set({ token: null, user: null, isAuthenticated: false });
         }

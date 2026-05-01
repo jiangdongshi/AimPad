@@ -1,4 +1,5 @@
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useAuthStore } from '@/stores/authStore';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useLocale } from '@/hooks/useTheme';
@@ -19,19 +20,57 @@ export function Settings() {
     quality,
     soundEnabled,
     soundVolume,
+    syncStatus,
+    lastSyncedAt,
     updateSettings,
     resetToDefaults,
+    syncToServer,
+    loadFromServer,
   } = useSettingsStore();
 
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const locale = useLocale();
+
+  const syncStatusText = {
+    idle: '',
+    saving: locale['settings.syncing'],
+    saved: locale['settings.synced'],
+    error: locale['settings.syncError'],
+  }[syncStatus];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-gaming text-text-primary">{locale['settings.title']}</h1>
-        <Button variant="ghost" size="sm" onClick={resetToDefaults}>
-          {locale['settings.resetDefaults']}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={resetToDefaults}>
+            {locale['settings.resetDefaults']}
+          </Button>
+          {isAuthenticated && (
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={loadFromServer}>
+                {locale['settings.loadFromCloud']}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={syncToServer} disabled={syncStatus === 'saving'}>
+                {locale['settings.saveToCloud']}
+              </Button>
+              {syncStatus !== 'idle' && (
+                <span className={`text-xs ${
+                  syncStatus === 'saved' ? 'text-green-400' :
+                  syncStatus === 'error' ? 'text-red-400' :
+                  'text-text-muted'
+                }`}>
+                  {syncStatusText}
+                </span>
+              )}
+              {lastSyncedAt && syncStatus === 'saved' && (
+                <span className="text-xs text-text-muted">
+                  {new Date(lastSyncedAt).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">
