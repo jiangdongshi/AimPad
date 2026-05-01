@@ -40,7 +40,6 @@ echo "==> 创建部署目录: $DEPLOY_PATH"
 mkdir -p "$DEPLOY_PATH"
 
 # 4. 复制 docker-compose.yml 到部署目录
-# 如果是从项目目录运行，直接复制
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -60,15 +59,36 @@ if [ -f "$SCRIPT_DIR/deploy.sh" ]; then
     echo "已复制 deploy.sh"
 fi
 
-# 6. 登录 GHCR（需要 token）
+# 6. 创建配置目录（数据由 Docker 命名卷管理，无需手动创建 data 目录）
+echo "==> 创建配置目录..."
+mkdir -p "$DEPLOY_PATH/config/mysql"
+mkdir -p "$DEPLOY_PATH/config/redis"
+
+# 7. 创建 .env 文件（如果不存在）
+if [ ! -f "$DEPLOY_PATH/.env" ]; then
+    echo "==> 创建 .env 文件，请填写密码..."
+    cat > "$DEPLOY_PATH/.env" << 'ENVEOF'
+# MySQL
+MYSQL_ROOT_PASSWORD=your_strong_root_password_here
+MYSQL_PASSWORD=your_strong_user_password_here
+
+# Redis
+REDIS_PASSWORD=your_strong_redis_password_here
+ENVEOF
+    echo "已创建 $DEPLOY_PATH/.env，请编辑填写实际密码"
+else
+    echo ".env 文件已存在，跳过"
+fi
+
+# 8. 登录华为云 SWR
 echo ""
 echo "=========================================="
-echo "  请手动登录 GHCR 以拉取私有镜像："
+echo "  请手动登录华为云 SWR 以拉取镜像："
 echo "  docker login swr.cn-north-4.myhuaweicloud.com -u <SWR_USERNAME>"
 echo "=========================================="
 echo ""
 
-# 7. 首次拉取并启动
+# 9. 首次拉取并启动
 echo "==> 首次拉取镜像并启动..."
 cd "$DEPLOY_PATH"
 docker compose pull
@@ -78,5 +98,6 @@ echo ""
 echo "=========================================="
 echo "  初始化完成!"
 echo "  部署目录: $DEPLOY_PATH"
+echo "  数据管理: docker volume ls | grep aimpad"
 echo "  访问: http://$(curl -s ifconfig.me 2>/dev/null || echo 'YOUR_SERVER_IP')"
 echo "=========================================="

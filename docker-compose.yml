@@ -40,9 +40,8 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Shanghai
     volumes:
-      - ./data/mysql:/var/lib/mysql
+      - mysql-data:/var/lib/mysql
       - ./config/mysql/custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
-      - ./data/mysql/log:/var/log/mysql
     command: >
       --default-authentication-plugin=caching_sha2_password
       --character-set-server=utf8mb4
@@ -66,7 +65,7 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
-      - ./data/redis:/data
+      - redis-data:/data
       - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     command: redis-server /usr/local/etc/redis/redis.conf
     healthcheck:
@@ -77,6 +76,13 @@ services:
       start_period: 10s
     networks:
       - aimpad-net
+
+# ============================================
+# 命名卷（Docker 管理，解决 bind mount 权限问题）
+# ============================================
+volumes:
+  mysql-data:
+  redis-data:
 
 # ============================================
 # 网络配置
