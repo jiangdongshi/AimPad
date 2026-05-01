@@ -34,3 +34,6 @@ vite.config.js
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Docker data (MySQL/Redis persist on server)
+data/
