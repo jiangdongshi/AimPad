@@ -101,8 +101,6 @@ function toServerPayload(state: SettingsState) {
   };
 }
 
-let syncTimer: ReturnType<typeof setTimeout> | null = null;
-
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
@@ -112,13 +110,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       updateSettings: (partial) => {
         set((state) => ({ ...state, ...partial }));
-        // 防抖同步到服务器
-        debouncedSyncToServer(get, set);
       },
 
       resetToDefaults: () => {
         set({ ...DEFAULT_SETTINGS, syncStatus: 'idle', lastSyncedAt: get().lastSyncedAt });
-        debouncedSyncToServer(get, set);
       },
 
       loadFromServer: async () => {
@@ -172,28 +167,3 @@ export const useSettingsStore = create<SettingsState>()(
   )
 );
 
-function debouncedSyncToServer(
-  get: () => SettingsState,
-  set: (partial: Partial<SettingsState>) => void
-) {
-  if (syncTimer) clearTimeout(syncTimer);
-  syncTimer = setTimeout(async () => {
-    // 检查是否有 token（用户已登录）
-    try {
-      const raw = localStorage.getItem('aimpad-auth');
-      const token = raw ? JSON.parse(raw)?.state?.token : null;
-      if (!token) return;
-    } catch {
-      return;
-    }
-
-    set({ syncStatus: 'saving' });
-    try {
-      const state = get();
-      const { settings } = await settingsApi.update(toServerPayload(state));
-      set({ syncStatus: 'saved', lastSyncedAt: settings.updatedAt });
-    } catch {
-      set({ syncStatus: 'error' });
-    }
-  }, 800);
-}
