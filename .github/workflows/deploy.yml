@@ -3,7 +3,7 @@ name: Build & Deploy
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # 支持手动触发
+  workflow_dispatch:
 
 env:
   REGISTRY: swr.cn-north-4.myhuaweicloud.com
@@ -11,17 +11,12 @@ env:
   API_IMAGE: aimpad/api
 
 jobs:
-  # ============================================
-  # Job 1: 构建并推送前端 + API Docker 镜像到华为云 SWR
-  # ============================================
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,14 +71,9 @@ jobs:
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
-  # ============================================
-  # Job 2: 更新 GitOps 仓库中的镜像 tag
-  # 将 docker-compose.yml 中的版本号更新为本次构建的 SHA，推回仓库
-  # ============================================
   update-gitops:
     runs-on: ubuntu-latest
     needs: build-and-push
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -109,13 +99,9 @@ jobs:
           git commit -m "chore: update image tags to ${{ needs.build-and-push.outputs.image_tag }}"
           git push
 
-  # ============================================
-  # Job 3: SSH 远程触发 ECS 部署（替代 Watchtower 轮询）
-  # 仓库标签更新完成后，服务器立刻拉取最新代码并重新部署
-  # ============================================
   deploy:
     runs-on: ubuntu-latest
-    needs: update-gitops          # 必须等 gitops 更新完成，保证仓库里 tag 是最新的
+    needs: update-gitops
     steps:
       - name: Deploy to ECS via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -123,10 +109,9 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          strict_host_key_checking: false   # 允许首次连接和 IP 变化
           script: |
             cd /opt/aimpad
             git pull origin main
             docker compose pull
             docker compose up -d --remove-orphans
-            # 如果主机 nginx 配置有变化，可在此处重新加载
-            nginx -s reload || true
