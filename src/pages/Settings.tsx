@@ -209,10 +209,10 @@ export function Settings() {
                 {(['dot', 'cross', 'circle'] as const).map((style) => (
                   <button
                     key={style}
-                    className={`px-4 py-2 rounded capitalize ${
+                    className={`px-4 py-2 rounded capitalize border transition-all ${
                       crosshairStyle === style
-                        ? 'bg-accent text-surface-900'
-                        : 'bg-surface-700 text-text-secondary hover:text-text-primary'
+                        ? 'bg-accent text-surface-900 border-accent shadow-lg shadow-accent/20'
+                        : 'bg-surface-700 text-text-secondary border-surface-600 hover:text-text-primary hover:border-surface-500'
                     }`}
                     onClick={() => updateSettings({ crosshairStyle: style })}
                   >
@@ -259,10 +259,10 @@ export function Settings() {
                 {(['low', 'medium', 'high', 'ultra'] as const).map((q) => (
                   <button
                     key={q}
-                    className={`px-4 py-2 rounded capitalize ${
+                    className={`px-4 py-2 rounded capitalize border transition-all ${
                       quality === q
-                        ? 'bg-accent text-surface-900'
-                        : 'bg-surface-700 text-text-secondary hover:text-text-primary'
+                        ? 'bg-accent text-surface-900 border-accent shadow-lg shadow-accent/20'
+                        : 'bg-surface-700 text-text-secondary border-surface-600 hover:text-text-primary hover:border-surface-500'
                     }`}
                     onClick={() => updateSettings({ quality: q })}
                   >
