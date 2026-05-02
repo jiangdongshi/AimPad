@@ -30,22 +30,27 @@ export function ThemeSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-surface-700 hover:bg-surface-600 transition-colors text-sm"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm"
+        style={{
+          backgroundColor: 'var(--color-bg-surface-hover)',
+          color: 'var(--color-text-secondary)',
+        }}
         title="切换主题"
       >
         <span className="flex gap-0.5">
           <span
-            className="w-2.5 h-2.5 rounded-full border border-white/20"
-            style={{ backgroundColor: current.preview.bg }}
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: current.preview.bg, border: '1px solid var(--color-text-muted)' }}
           />
           <span
-            className="w-2.5 h-2.5 rounded-full border border-white/20"
-            style={{ backgroundColor: current.preview.accent }}
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: current.preview.accent, border: '1px solid var(--color-text-muted)' }}
           />
         </span>
-        <span className="text-text-secondary text-xs hidden sm:inline">{current.name}</span>
+        <span className="text-xs hidden sm:inline">{current.name}</span>
         <svg
-          className={`w-3 h-3 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
+          style={{ color: 'var(--color-text-muted)' }}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -57,7 +62,11 @@ export function ThemeSwitcher() {
       {open && (
         <div
           className="absolute right-0 top-full mt-2 w-56 rounded-lg shadow-2xl z-50 py-1 animate-fade-in"
-          style={{ backgroundColor: '#1e1e2e', border: '1px solid rgba(255,255,255,0.1)' }}
+          style={{
+            backgroundColor: 'var(--color-bg-surface)',
+            border: '1px solid var(--color-accent)',
+            boxShadow: '0 0 30px rgba(var(--tw-accent-rgb) / 0.15), var(--shadow-lg)',
+          }}
         >
           {THEMES.map((t) => {
             const isActive = theme === t.id;
@@ -67,32 +76,36 @@ export function ThemeSwitcher() {
                 onClick={() => handleSelect(t.id)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors"
                 style={{
-                  backgroundColor: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  color: isActive ? '#ffffff' : '#a0a0b8',
+                  backgroundColor: isActive ? 'var(--color-bg-surface-hover)' : 'transparent',
+                  color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
                 }}
-                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'; }}
-                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-bg-surface-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
               >
                 <div className="flex gap-1 shrink-0">
                   <span
-                    className="w-4 h-4 rounded-full border border-white/10"
-                    style={{ backgroundColor: t.preview.bg }}
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: t.preview.bg, border: '1px solid var(--color-text-muted)' }}
                   />
                   <span
-                    className="w-4 h-4 rounded-full border border-white/10"
-                    style={{ backgroundColor: t.preview.accent }}
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: t.preview.accent, border: '1px solid var(--color-text-muted)' }}
                   />
                   <span
-                    className="w-4 h-4 rounded-full border border-white/10"
-                    style={{ backgroundColor: t.preview.text }}
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: t.preview.text, border: '1px solid var(--color-text-muted)' }}
                   />
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-medium">{t.name}</div>
-                  <div className="text-xs truncate" style={{ color: '#666680' }}>{t.description}</div>
+                  <div className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{t.description}</div>
                 </div>
                 {isActive && (
-                  <svg className="w-4 h-4 shrink-0 ml-auto" style={{ color: '#f59e0b' }} fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 shrink-0 ml-auto" style={{ color: 'var(--color-accent)' }} fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 )}

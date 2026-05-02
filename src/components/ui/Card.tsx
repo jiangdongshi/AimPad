@@ -7,22 +7,29 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ variant = 'default', hoverable = false, className = '', children, ...props }, ref) => {
-    const baseStyles = 'rounded-lg p-4';
-
-    const variantStyles = {
-      default: 'bg-surface-800',
-      elevated: 'bg-surface-800 shadow-lg',
-      bordered: 'bg-surface-800 border border-surface-600',
+    const baseStyle: React.CSSProperties = {
+      borderRadius: '0.5rem',
+      padding: '1rem',
+      backgroundColor: 'var(--color-bg-surface)',
+      transition: hoverable ? 'all 0.3s ease' : undefined,
+      cursor: hoverable ? 'pointer' : undefined,
+      border: variant === 'bordered' ? '1px solid var(--color-bg-surface-hover)' : undefined,
+      boxShadow: variant === 'elevated' ? 'var(--shadow-lg)' : undefined,
     };
-
-    const hoverStyles = hoverable
-      ? 'hover:bg-surface-700 hover:shadow-xl transition-all duration-300 cursor-pointer'
-      : '';
 
     return (
       <div
         ref={ref}
-        className={`${baseStyles} ${variantStyles[variant]} ${hoverStyles} ${className}`}
+        className={className}
+        style={baseStyle}
+        onMouseEnter={hoverable ? (e) => {
+          (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-surface-hover)';
+          (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-lg)';
+        } : undefined}
+        onMouseLeave={hoverable ? (e) => {
+          (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-surface)';
+          (e.currentTarget as HTMLElement).style.boxShadow = variant === 'elevated' ? 'var(--shadow-lg)' : 'none';
+        } : undefined}
         {...props}
       >
         {children}

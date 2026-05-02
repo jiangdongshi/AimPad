@@ -50,7 +50,7 @@ export class SphereTrackScene extends BaseScene {
     this.angle += this.config.targetSpeed * deltaTime / 1000;
     const radius = this.config.trackRadius;
     const x = Math.cos(this.angle) * radius;
-    const y = Math.sin(this.angle) * (radius * 0.6) + 4;
+    const y = Math.sin(this.angle) * (radius * 0.5) + 6;
     const z = 8;
 
     this.trackingTarget.position.x = x;
@@ -76,21 +76,21 @@ export class SphereTrackScene extends BaseScene {
   private createTrackingTarget() {
     this.trackingTarget = BABYLON.MeshBuilder.CreateSphere(
       'trackTarget',
-      { diameter: this.config.targetSize },
+      { diameter: this.config.targetSize * this.targetSizeMultiplier },
       this.scene
     );
-    this.trackingTarget.position = new BABYLON.Vector3(0, 4, 8);
+    this.trackingTarget.position = new BABYLON.Vector3(0, 6, 8);
 
     // 跟踪目标材质（绿色）
     const material = new BABYLON.StandardMaterial('trackTargetMat', this.scene);
     material.emissiveColor = new BABYLON.Color3(0, 1, 0.5);
     material.diffuseColor = new BABYLON.Color3(0, 0.8, 0.3);
-    material.alpha = 0.8;
+    material.alpha = 0.9;
     this.trackingTarget.material = material;
 
     // 光晕
     const glowLayer = new BABYLON.GlowLayer('glow', this.scene);
-    glowLayer.intensity = 0.3;
+    glowLayer.intensity = 0.4;
   }
 
   private createTrackGuide() {
@@ -102,7 +102,7 @@ export class SphereTrackScene extends BaseScene {
       const angle = (i / segments) * Math.PI * 2;
       points.push(new BABYLON.Vector3(
         Math.cos(angle) * radius,
-        Math.sin(angle) * (radius * 0.6) + 4,
+        Math.sin(angle) * (radius * 0.5) + 6,
         8
       ));
     }
@@ -112,7 +112,7 @@ export class SphereTrackScene extends BaseScene {
       { points },
       this.scene
     );
-    trackLine.color = new BABYLON.Color3(0.15, 0.15, 0.2);
+    trackLine.color = new BABYLON.Color3(0.2, 0.2, 0.3);
   }
 
   private worldToScreen(worldPos: BABYLON.Vector3): { x: number; y: number } {

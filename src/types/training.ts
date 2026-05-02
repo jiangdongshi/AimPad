@@ -7,6 +7,23 @@ export type TaskType =
 
 export type Difficulty = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 
+// 游戏难度（暂停界面可调节）
+export type GameDifficulty = 'easy' | 'simple' | 'normal' | 'hard' | 'hell';
+
+export interface GameDifficultyConfig {
+  label: string;           // 显示名称（locale key）
+  targetSizeMultiplier: number; // 目标大小倍率
+  targetLifetime: number;  // 目标存活时间（ms），0 表示无限制
+}
+
+export const GAME_DIFFICULTY_CONFIG: Record<GameDifficulty, GameDifficultyConfig> = {
+  easy:   { label: 'difficulty.easy',   targetSizeMultiplier: 1.5, targetLifetime: 0 },
+  simple: { label: 'difficulty.simple', targetSizeMultiplier: 1.0, targetLifetime: 0 },
+  normal: { label: 'difficulty.normal', targetSizeMultiplier: 0.7, targetLifetime: 0 },
+  hard:   { label: 'difficulty.hard',   targetSizeMultiplier: 0.5, targetLifetime: 2000 },
+  hell:   { label: 'difficulty.hell',   targetSizeMultiplier: 0.3, targetLifetime: 1200 },
+};
+
 export interface TrainingTaskConfig {
   id: string;
   name: string;

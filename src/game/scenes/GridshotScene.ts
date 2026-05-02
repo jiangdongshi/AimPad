@@ -50,6 +50,9 @@ export class GridshotScene extends BaseScene {
 
     const now = performance.now();
 
+    // 检查过期目标（困难/地狱模式）
+    this.checkExpiredTargets();
+
     // 检查是否需要生成新目标
     if (this.targets.length < this.config.targetCount &&
         now - this.lastTargetSpawnTime > this.config.spawnInterval) {
@@ -65,32 +68,33 @@ export class GridshotScene extends BaseScene {
 
   private spawnRandomTarget() {
     const { gridRows, gridCols, targetSize } = this.config;
-    const cellWidth = 16 / gridCols;
-    const cellHeight = 10 / gridRows;
+    const cellWidth = 14 / gridCols;
+    const cellHeight = 8 / gridRows;
 
     const row = Math.floor(Math.random() * gridRows);
     const col = Math.floor(Math.random() * gridCols);
 
     const x = (col - gridCols / 2 + 0.5) * cellWidth;
-    const y = (row + 0.5) * cellHeight + 1;
-    const z = 5 + Math.random() * 3;
+    const y = (row + 0.5) * cellHeight + 2;
+    const z = 8; // 固定在目标墙上
 
-    this.spawnTarget(new BABYLON.Vector3(x, y, z), targetSize);
+    this.spawnTarget(new BABYLON.Vector3(x, y, z), targetSize * this.targetSizeMultiplier);
   }
 
   private createGridLines() {
     const { gridRows, gridCols } = this.config;
-    const gridColor = new BABYLON.Color3(0.2, 0.2, 0.3);
+    const gridColor = new BABYLON.Color3(0.15, 0.15, 0.25);
+    const gridZ = 8; // 与目标位置一致
 
     // 垂直线
     for (let i = 0; i <= gridCols; i++) {
-      const x = (i - gridCols / 2) * (16 / gridCols);
+      const x = (i - gridCols / 2) * (14 / gridCols);
       const line = BABYLON.MeshBuilder.CreateLines(
         `gridLineV${i}`,
         {
           points: [
-            new BABYLON.Vector3(x, 1, 5),
-            new BABYLON.Vector3(x, 11, 5),
+            new BABYLON.Vector3(x, 2, gridZ),
+            new BABYLON.Vector3(x, 10, gridZ),
           ],
         },
         this.scene
@@ -101,13 +105,13 @@ export class GridshotScene extends BaseScene {
 
     // 水平线
     for (let i = 0; i <= gridRows; i++) {
-      const y = i * (10 / gridRows) + 1;
+      const y = i * (8 / gridRows) + 2;
       const line = BABYLON.MeshBuilder.CreateLines(
         `gridLineH${i}`,
         {
           points: [
-            new BABYLON.Vector3(-8, y, 5),
-            new BABYLON.Vector3(8, y, 5),
+            new BABYLON.Vector3(-7, y, gridZ),
+            new BABYLON.Vector3(7, y, gridZ),
           ],
         },
         this.scene
@@ -118,27 +122,15 @@ export class GridshotScene extends BaseScene {
   }
 
   private createWalls() {
-    // 左墙
-    const leftWall = BABYLON.MeshBuilder.CreatePlane('leftWall', { width: 20, height: 12 }, this.scene);
-    leftWall.position = new BABYLON.Vector3(-10, 6, 5);
-    leftWall.rotation.y = Math.PI / 2;
+    // 后墙（目标墙背景）
+    const backWall = BABYLON.MeshBuilder.CreatePlane('backWall', { width: 16, height: 10 }, this.scene);
+    backWall.position = new BABYLON.Vector3(0, 6, 8.1);
 
-    // 右墙
-    const rightWall = BABYLON.MeshBuilder.CreatePlane('rightWall', { width: 20, height: 12 }, this.scene);
-    rightWall.position = new BABYLON.Vector3(10, 6, 5);
-    rightWall.rotation.y = -Math.PI / 2;
-
-    // 后墙（目标墙）
-    const backWall = BABYLON.MeshBuilder.CreatePlane('backWall', { width: 20, height: 12 }, this.scene);
-    backWall.position = new BABYLON.Vector3(0, 6, 8);
-
-    // 墙壁材质
+    // 墙壁材质 - 深色背景
     const wallMat = new BABYLON.StandardMaterial('wallMat', this.scene);
-    wallMat.diffuseColor = new BABYLON.Color3(0.08, 0.08, 0.12);
-    wallMat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
+    wallMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.15);
+    wallMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
 
-    leftWall.material = wallMat;
-    rightWall.material = wallMat;
     backWall.material = wallMat;
   }
 
