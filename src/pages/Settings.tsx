@@ -209,11 +209,10 @@ export function Settings() {
                 {(['dot', 'cross', 'circle'] as const).map((style) => (
                   <button
                     key={style}
-                    className={`px-4 py-2 rounded capitalize font-semibold transition-all ${
-                      crosshairStyle === style
-                        ? 'bg-accent text-surface-900 ring-2 ring-accent ring-offset-2 ring-offset-surface-800'
-                        : 'bg-surface-700 text-text-secondary border border-surface-600 hover:text-text-primary hover:border-surface-500'
-                    }`}
+                    style={crosshairStyle === style
+                      ? { border: '2px solid #ffffff', borderRadius: '12px', padding: '8px 16px', background: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 700 }
+                      : { border: '2px solid transparent', borderRadius: '12px', padding: '8px 16px', background: 'rgba(255,255,255,0.05)', color: '#888' }
+                    }
                     onClick={() => updateSettings({ crosshairStyle: style })}
                   >
                     {style}
@@ -259,11 +258,10 @@ export function Settings() {
                 {(['low', 'medium', 'high', 'ultra'] as const).map((q) => (
                   <button
                     key={q}
-                    className={`px-4 py-2 rounded capitalize font-semibold transition-all ${
-                      quality === q
-                        ? 'bg-accent text-surface-900 ring-2 ring-accent ring-offset-2 ring-offset-surface-800'
-                        : 'bg-surface-700 text-text-secondary border border-surface-600 hover:text-text-primary hover:border-surface-500'
-                    }`}
+                    style={quality === q
+                      ? { border: '2px solid #ffffff', borderRadius: '12px', padding: '8px 16px', background: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 700 }
+                      : { border: '2px solid transparent', borderRadius: '12px', padding: '8px 16px', background: 'rgba(255,255,255,0.05)', color: '#888' }
+                    }
                     onClick={() => updateSettings({ quality: q })}
                   >
                     {q}
