@@ -210,8 +210,8 @@ export function Settings() {
                   <button
                     key={style}
                     style={crosshairStyle === style
-                      ? { border: '2px solid #ffffff', borderRadius: '12px', padding: '8px 16px', background: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 700 }
-                      : { border: '2px solid transparent', borderRadius: '12px', padding: '8px 16px', background: 'rgba(255,255,255,0.05)', color: '#888' }
+                      ? { border: '2px solid var(--tw-accent)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-700)', color: 'var(--tw-text-primary)', fontWeight: 700 }
+                      : { border: '2px solid var(--tw-surface-600)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-800)', color: 'var(--tw-text-secondary)' }
                     }
                     onClick={() => updateSettings({ crosshairStyle: style })}
                   >
@@ -259,8 +259,8 @@ export function Settings() {
                   <button
                     key={q}
                     style={quality === q
-                      ? { border: '2px solid #ffffff', borderRadius: '12px', padding: '8px 16px', background: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 700 }
-                      : { border: '2px solid transparent', borderRadius: '12px', padding: '8px 16px', background: 'rgba(255,255,255,0.05)', color: '#888' }
+                      ? { border: '2px solid var(--tw-accent)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-700)', color: 'var(--tw-text-primary)', fontWeight: 700 }
+                      : { border: '2px solid var(--tw-surface-600)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-800)', color: 'var(--tw-text-secondary)' }
                     }
                     onClick={() => updateSettings({ quality: q })}
                   >
