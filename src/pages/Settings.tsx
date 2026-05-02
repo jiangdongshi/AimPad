@@ -81,34 +81,64 @@ export function Settings() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              {THEMES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => updateSettings({ theme: t.id as ThemeId })}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-lg border transition-all ${
-                    theme === t.id
-                      ? 'border-accent bg-surface-700'
-                      : 'border-surface-600 bg-surface-800 hover:bg-surface-700'
-                  }`}
-                >
-                  <div className="flex gap-1">
+              {THEMES.map((t) => {
+                const selected = theme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => updateSettings({ theme: t.id as ThemeId })}
+                    className="flex flex-col items-center gap-2 p-3 rounded-lg transition-all"
+                    style={{
+                      border: selected
+                        ? '2px solid var(--color-accent)'
+                        : '1px solid var(--color-bg-surface-hover)',
+                      backgroundColor: selected
+                        ? 'var(--color-bg-surface-hover)'
+                        : 'var(--color-bg-surface)',
+                      boxShadow: selected
+                        ? '0 0 16px rgba(var(--tw-accent-rgb) / 0.2)'
+                        : 'none',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <div className="flex gap-1">
+                      <span
+                        className="w-5 h-5 rounded-full"
+                        style={{
+                          backgroundColor: t.preview.bg,
+                          border: '1px solid var(--color-text-muted)',
+                        }}
+                      />
+                      <span
+                        className="w-5 h-5 rounded-full"
+                        style={{
+                          backgroundColor: t.preview.accent,
+                          border: '1px solid var(--color-text-muted)',
+                        }}
+                      />
+                      <span
+                        className="w-5 h-5 rounded-full"
+                        style={{
+                          backgroundColor: t.preview.text,
+                          border: '1px solid var(--color-text-muted)',
+                        }}
+                      />
+                    </div>
                     <span
-                      className="w-5 h-5 rounded-full border border-white/10"
-                      style={{ backgroundColor: t.preview.bg }}
-                    />
+                      className="text-xs font-medium"
+                      style={{ color: 'var(--color-text-primary)' }}
+                    >
+                      {t.name}
+                    </span>
                     <span
-                      className="w-5 h-5 rounded-full border border-white/10"
-                      style={{ backgroundColor: t.preview.accent }}
-                    />
-                    <span
-                      className="w-5 h-5 rounded-full border border-white/10"
-                      style={{ backgroundColor: t.preview.text }}
-                    />
-                  </div>
-                  <span className="text-xs text-text-primary font-medium">{t.name}</span>
-                  <span className="text-xs text-text-muted">{t.nameEn}</span>
-                </button>
-              ))}
+                      className="text-xs"
+                      style={{ color: 'var(--color-text-muted)' }}
+                    >
+                      {t.nameEn}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

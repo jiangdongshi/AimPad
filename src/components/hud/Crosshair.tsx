@@ -13,7 +13,6 @@ export function Crosshair() {
     cross: {
       width: `${crosshairSize * 5}px`,
       height: `${crosshairSize * 5}px`,
-      position: 'relative',
     },
     circle: {
       width: `${crosshairSize * 6}px`,
@@ -26,7 +25,7 @@ export function Crosshair() {
   if (crosshairStyle === 'dot') {
     return (
       <div
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50"
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50"
         style={styles.dot}
       />
     );
@@ -35,7 +34,7 @@ export function Crosshair() {
   if (crosshairStyle === 'cross') {
     return (
       <div
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50"
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50"
         style={styles.cross}
       >
         {/* 水平线 */}
@@ -59,7 +58,7 @@ export function Crosshair() {
 
   return (
     <div
-      className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50"
+      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50"
       style={styles.circle}
     />
   );

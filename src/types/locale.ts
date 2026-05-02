@@ -39,8 +39,11 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'training.paused': 'Paused',
     'training.quit': 'Quit',
     'training.resume': 'Resume',
+    'training.restart': 'Restart',
     'training.escPause': 'ESC to Pause',
     'training.targets': 'targets',
+    'training.clickToLock': 'Click to lock mouse',
+    'training.clickToStart': 'Click to start training',
 
     // Training Result
     'result.title': 'Training Complete',
@@ -117,6 +120,12 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'difficulty.intermediate': 'intermediate',
     'difficulty.advanced': 'advanced',
     'difficulty.expert': 'expert',
+    'difficulty.easy': 'Easy',
+    'difficulty.simple': 'Simple',
+    'difficulty.normal': 'Normal',
+    'difficulty.hard': 'Hard',
+    'difficulty.hell': 'Hell',
+    'difficulty.select': 'Difficulty',
 
     // Task types
     'taskType.static-clicking': 'static-clicking',
@@ -203,8 +212,11 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'training.paused': '已暂停',
     'training.quit': '退出',
     'training.resume': '继续',
+    'training.restart': '重新开始',
     'training.escPause': '按 ESC 暂停',
     'training.targets': '个目标',
+    'training.clickToLock': '点击锁定鼠标',
+    'training.clickToStart': '点击开始训练',
 
     // Training Result
     'result.title': '训练完成',
@@ -281,6 +293,12 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'difficulty.intermediate': '进阶',
     'difficulty.advanced': '高级',
     'difficulty.expert': '专家',
+    'difficulty.easy': '容易',
+    'difficulty.simple': '简单',
+    'difficulty.normal': '普通',
+    'difficulty.hard': '困难',
+    'difficulty.hell': '地狱',
+    'difficulty.select': '难度选择',
 
     // Task types
     'taskType.static-clicking': '静态点击',

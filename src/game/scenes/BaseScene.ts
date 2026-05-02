@@ -11,6 +11,10 @@ export abstract class BaseScene {
   protected isActive: boolean = false;
   protected taskId: string;
 
+  // 难度配置
+  protected targetLifetime: number = 0; // 0 表示无限制
+  protected targetSizeMultiplier: number = 1.0;
+
   // 统计数据
   protected hits: number = 0;
   protected misses: number = 0;
@@ -68,12 +72,8 @@ export abstract class BaseScene {
     this.scene.onPointerDown = (_evt) => {
       if (!this.isActive) return;
 
-      const ray = this.scene.createPickingRay(
-        this.scene.pointerX,
-        this.scene.pointerY,
-        BABYLON.Matrix.Identity(),
-        this.camera
-      );
+      // 从摄像机中心发射射线（准星位置）
+      const ray = this.camera.getForwardRay(100);
 
       const hit = this.scene.pickWithRay(ray);
       if (hit?.pickedMesh?.metadata?.isTarget) {
@@ -154,12 +154,48 @@ export abstract class BaseScene {
       { width, height },
       this.scene
     );
+    ground.position.y = 0;
     const groundMat = new BABYLON.StandardMaterial('groundMat', this.scene);
-    groundMat.diffuseColor = new BABYLON.Color3(0.12, 0.12, 0.18);
-    groundMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+    groundMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.15);
+    groundMat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
     ground.material = groundMat;
     ground.receiveShadows = true;
     return ground;
+  }
+
+  // 设置难度配置
+  setDifficulty(targetSizeMultiplier: number, targetLifetime: number) {
+    this.targetSizeMultiplier = targetSizeMultiplier;
+    this.targetLifetime = targetLifetime;
+  }
+
+  // 检查过期目标（困难/地狱模式）
+  protected checkExpiredTargets() {
+    if (this.targetLifetime <= 0) return;
+
+    const now = performance.now();
+    const expired: BABYLON.Mesh[] = [];
+
+    for (const target of this.targets) {
+      const spawnTime = target.metadata?.spawnTime || 0;
+      if (spawnTime > 0 && now - spawnTime > this.targetLifetime) {
+        expired.push(target);
+      }
+    }
+
+    for (const target of expired) {
+      this.misses++;
+      this.removeTarget(target);
+    }
+  }
+
+  // 获取统计数据
+  getStats() {
+    return {
+      hits: this.hits,
+      misses: this.misses,
+      reactionTimes: this.reactionTimes,
+    };
   }
 
   dispose() {

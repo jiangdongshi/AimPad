@@ -160,53 +160,71 @@ AimPad/
 │   ├── sounds/              # 音效文件
 │   └── favicon.ico
 ├── src/
+│   ├── api/                 # API 客户端
+│   │   ├── client.ts        # Axios 封装、JWT 拦截器
+│   │   ├── auth.ts          # 认证接口
+│   │   └── settings.ts      # 设置同步接口
 │   ├── components/          # React 组件
-│   │   ├── ui/              # 通用 UI 组件（Button、Card、Modal 等）
-│   │   ├── hud/             # HUD 组件（准星、血条、弹药数等）
-│   │   ├── dashboard/       # 数据统计面板组件
-│   │   ├── settings/        # 设置页面组件
-│   │   └── layout/          # 布局组件（Header、Sidebar、Footer）
+│   │   ├── ui/              # 通用 UI 组件
+│   │   │   ├── Button.tsx
+│   │   │   ├── Card.tsx
+│   │   │   ├── Badge.tsx
+│   │   │   ├── ThemeSwitcher.tsx
+│   │   │   ├── LanguageSwitcher.tsx
+│   │   │   └── UserMenu.tsx
+│   │   ├── hud/             # HUD 组件
+│   │   │   ├── Crosshair.tsx       # 准星（dot/cross/circle）
+│   │   │   ├── TrainingHUD.tsx     # 训练实时数据
+│   │   │   └── TrainingResultPanel.tsx  # 训练结果面板
+│   │   └── layout/          # 布局组件
+│   │       ├── Header.tsx
+│   │       └── Layout.tsx
 │   ├── game/                # Babylon.js 游戏逻辑
-│   │   ├── scenes/          # 不同训练任务场景
-│   │   │   ├── BaseScene.ts
-│   │   │   ├── GridshotScene.ts
-│   │   │   └── SphereTrackScene.ts
-│   │   ├── entities/        # 游戏实体（目标、准星、特效）
+│   │   ├── scenes/          # 训练任务场景
+│   │   │   ├── BaseScene.ts         # 场景基类（难度系统、目标过期）
+│   │   │   ├── GridshotScene.ts     # 静态点射 / 蜘蛛射击
+│   │   │   └── SphereTrackScene.ts  # 跟踪训练
 │   │   ├── input/           # 输入抽象层
 │   │   │   ├── InputManager.ts
-│   │   │   ├── GamepadAdapter.ts
-│   │   │   └── MouseAdapter.ts
-│   │   ├── physics/         # 物理与碰撞检测
+│   │   │   └── GamepadAdapter.ts
 │   │   └── engine/          # Babylon.js 引擎配置
+│   │       └── GameEngine.ts
 │   ├── hooks/               # 自定义 React Hooks
 │   │   ├── useGamepad.ts
 │   │   ├── useTraining.ts
-│   │   └── useStatistics.ts
+│   │   ├── useStatistics.ts
+│   │   └── useTheme.ts      # 主题 + 国际化
 │   ├── stores/              # Zustand 状态管理
 │   │   ├── gameStore.ts
-│   │   ├── settingsStore.ts
-│   │   └── statsStore.ts
+│   │   ├── authStore.ts
+│   │   └── settingsStore.ts
 │   ├── utils/               # 工具函数
 │   │   ├── scoring.ts       # 评分算法
-│   │   ├── hitDetection.ts  # 命中检测
+│   │   ├── inputSmoother.ts # 输入平滑
 │   │   ├── gamepadMap.ts    # 手柄按键映射
 │   │   └── storage.ts       # IndexedDB 封装
 │   ├── types/               # TypeScript 类型定义
 │   │   ├── gamepad.ts
-│   │   ├── training.ts
-│   │   └── statistics.ts
+│   │   ├── training.ts      # 任务配置、难度系统
+│   │   ├── statistics.ts
+│   │   ├── auth.ts
+│   │   ├── theme.ts         # 8 主题定义
+│   │   └── locale.ts        # 中英文翻译
 │   ├── styles/              # 全局样式
-│   │   ├── tokens.css       # CSS 变量定义
-│   │   ├── typography.css
-│   │   └── global.css
+│   │   ├── tokens.css       # CSS 设计令牌
+│   │   ├── themes.css       # 8 套主题 CSS 变量
+│   │   └── global.css       # 全局样式 + 动画
 │   ├── pages/               # 页面组件
 │   │   ├── Home.tsx
 │   │   ├── Training.tsx
 │   │   ├── Statistics.tsx
-│   │   └── Settings.tsx
+│   │   ├── Settings.tsx
+│   │   ├── Login.tsx
+│   │   ├── Register.tsx
+│   │   └── ForgotPassword.tsx
 │   ├── App.tsx
 │   └── main.tsx
-├── server/                  # 后端 API（Phase 2+）
+├── server/                  # 后端 API
 ├── .eslintrc.cjs
 ├── .prettierrc
 ├── index.html
@@ -1644,52 +1662,217 @@ scene.postProcessesEnabled = false; // 关闭后处理
 
 ---
 
+## 11. 已实现功能总览
+
+### 11.1 训练系统
+
+| 功能 | 说明 |
+|------|------|
+| **6 个训练任务** | Gridshot（静态点射）、Spidershot（蜘蛛射击）、SphereTrack（球体跟踪）、StrafeTrack（移动跟踪）、TargetSwitch（目标切换）、ReflexShot（反应射击） |
+| **5 级游戏难度** | 容易（1.5x）、简单（1.0x）、普通（0.7x）、困难（0.5x + 2s 消失）、地狱（0.3x + 1.2s 消失） |
+| **每个任务独立难度** | 各任务难度独立存储于 `localStorage`（key: `aimpad_task_difficulties`），默认为"困难"，切换任务自动加载对应难度 |
+| **3 秒倒计时** | 开始训练前显示大号倒计时数字 |
+| **Pointer Lock** | 训练时锁定鼠标指针，解锁自动暂停 |
+| **ESC 暂停** | 支持在等待、倒计时、游戏中三阶段按 ESC 暂停 |
+| **暂停菜单** | 暂停时显示难度选择器（选中蓝色高亮 + 缩放 + 下划线）+ 退出/重新开始/继续按钮 |
+| **难度切换自动重置** | 暂停时切换难度，点击继续会回到"点击开始训练"阶段（而非直接恢复） |
+| **目标过期机制** | 困难/地狱难度下，目标在指定时间未被击中会消失并计入脱靶（BaseScene.checkExpiredTargets） |
+| **Canvas 清除** | 重新开始训练时用 `gl.clear()` + `gl.finish()` 清除 WebGL 画布残影 |
+| **WebGL 场景销毁** | 训练结束/重置时正确销毁 Babylon.js 引擎和场景，防止内存泄漏 |
+
+**难度配置详情（GAME_DIFFICULTY_CONFIG）**：
+
+| 难度 | 目标大小倍率 | 目标存活时间 | 说明 |
+|------|-------------|-------------|------|
+| 容易 | 1.5x | 无限制 | 目标放大 |
+| 简单 | 1.0x | 无限制 | 默认大小 |
+| 普通 | 0.7x | 无限制 | 目标缩小 |
+| 困难 | 0.5x | 2000ms | 目标缩小 + 2 秒后消失 |
+| 地狱 | 0.3x | 1200ms | 目标极小 + 1.2 秒后消失 |
+
+### 11.2 3D 游戏引擎
+
+| 功能 | 说明 |
+|------|------|
+| **Babylon.js v6 引擎** | 带抗锯齿和模板缓冲的 3D 渲染 |
+| **FPS 风格摄像机** | 鼠标控制视角旋转，垂直旋转限制 ±60° |
+| **光线投射击中检测** | 从摄像机中心发射射线检测目标命中 |
+| **目标生成动画** | 红色发光球体，带 GlowLayer 辉光效果 |
+| **目标消失动画** | 命中后缩放至零的动画 |
+| **网格背景** | Gridshot 场景带墙面网格线参考 |
+| **椭圆轨道** | SphereTrack 场景带椭圆轨道引导线 |
+| **画质档位** | low（2x 缩放）、medium（1.5x）、high（1x）、ultra（0.75x） |
+| **FPS 监控** | 通过 `onBeginFrameObservable` 实时监测帧率 |
+
+### 11.3 输入系统
+
+| 功能 | 说明 |
+|------|------|
+| **Gamepad API 原生支持** | Xbox / PlayStation / Switch 手柄自动识别 |
+| **手柄按键映射** | 针对不同手柄类型的 16 键映射（含 Nintendo A/B 交换） |
+| **摇杆死区处理** | 基于幅度的平滑重映射，避免漂移 |
+| **输入平滑** | 移动平均缓冲区（默认 3 帧）减少摇杆抖动 |
+| **统一输入管理器** | 鼠标/手柄自动切换，边沿检测（shootPressed） |
+| **自定义鼠标处理** | 清除默认输入，使用 Pointer Lock API 的 movementX/Y |
+
+### 11.4 HUD 与准星
+
+| 功能 | 说明 |
+|------|------|
+| **3 种准星样式** | 点状（dot）、十字（cross）、圆形（circle） |
+| **准星颜色自定义** | 颜色选择器，实时预览 |
+| **准星大小可调** | 2-12px 滑块控制 |
+| **训练 HUD** | 顶部：分数、倒计时、命中率；左下：命中数、脱靶数、FPS |
+| **训练结果面板** | 最终分数、命中率、击杀数、平均反应时间、训练时长 |
+
+### 11.5 主题系统
+
+| 功能 | 说明 |
+|------|------|
+| **8 套完整主题** | 深黑（默认）、午夜蓝、森林绿、皇家紫、中国红、纯白、暖奶油、冷灰 |
+| **CSS 自定义属性** | 所有颜色通过 `var(--color-*)` 变量驱动 |
+| **RGB 变体** | 每个主题同时提供 RGB 值（支持 Tailwind 透明度） |
+| **主题跟随 UI** | 暂停菜单、主题选择器、设置页面、Card 组件均跟随主题 |
+| **`data-theme` 属性** | 通过 `<html data-theme="...">` 全局切换 |
+
+### 11.6 国际化
+
+| 功能 | 说明 |
+|------|------|
+| **中英文双语** | 约 170 个翻译键值对 |
+| **语言切换器** | 导航栏一键切换"中"/"EN" |
+| **覆盖范围** | 导航、首页、训练、结果、HUD、统计、设置、主题、难度、任务类型、认证 |
+
+### 11.7 用户认证
+
+| 功能 | 说明 |
+|------|------|
+| **邮箱验证码登录** | 发送 4 位验证码，60 秒冷却倒计时 |
+| **用户注册** | 邮箱 + 用户名（3-32 字符，字母数字下划线）+ 验证码 |
+| **找回密码** | 邮箱 + 验证码 + 新密码 + 确认密码 |
+| **JWT 令牌** | 登录后自动持久化，刷新页面自动恢复 |
+| **演示模式** | 验证码 1234（开发环境） |
+| **注册后同步** | 注册成功自动将本地设置推送到服务器 |
+
+### 11.8 设置与同步
+
+| 功能 | 说明 |
+|------|------|
+| **手柄设置** | 死区（0-0.5）、灵敏度（0.1-3）、Y 轴反转 |
+| **鼠标设置** | 灵敏度（0.1-5）、Y 轴反转 |
+| **准星设置** | 样式、颜色、大小 |
+| **显示设置** | 画质档位（low/medium/high/ultra） |
+| **音效设置** | 启用开关、音量滑块（0-100%） |
+| **LocalStorage 持久化** | 通过 Zustand persist 中间件自动保存 |
+| **云端同步** | 认证用户可"保存到云端"/"从云端加载" |
+| **同步状态指示** | 显示同步中/已同步/错误状态及时间戳 |
+| **重置默认** | 一键恢复所有设置 |
+
+### 11.9 数据统计
+
+| 功能 | 说明 |
+|------|------|
+| **IndexedDB 存储** | 训练结果本地持久化（AimPadDB） |
+| **任务筛选** | 按"全部任务"或特定任务过滤 |
+| **汇总卡片** | 总训练次数、最佳分数、平均分数、提升趋势 |
+| **性能指标** | 平均命中率、平均反应时间、最佳分数 |
+| **近期分数图表** | 最近训练成绩的柱状图 |
+| **任务统计表** | 每个任务的训练次数、最佳/平均分、命中率（颜色标签） |
+| **提升趋势计算** | 最近 10 次 vs 之前 10 次的平均分对比 |
+
+### 11.10 UI 组件库
+
+| 组件 | 说明 |
+|------|------|
+| **Button** | primary/secondary/danger/ghost 变体，sm/md/lg 尺寸，加载动画，图标槽位 |
+| **Card** | default/elevated/bordered 变体，hoverable 交互，CardHeader/CardTitle/CardContent 子组件 |
+| **Badge** | default/success/warning/danger/info 变体，药丸形状 |
+| **ThemeSwitcher** | 下拉主题选择器，颜色预览圆点，点击外部关闭 |
+| **LanguageSwitcher** | 中英文切换按钮 |
+| **UserMenu** | 用户头像下拉菜单，显示用户名/邮箱，登出按钮 |
+
+### 11.11 页面清单
+
+| 页面 | 路由 | 说明 |
+|------|------|------|
+| 首页 | `/` | 项目介绍、功能卡片、热门任务、使用指南 |
+| 训练页 | `/training` | 任务选择网格；`?task=xxx` 时进入 3D 画布训练 |
+| 统计页 | `/statistics` | 数据面板、趋势图表、任务统计表 |
+| 设置页 | `/settings` | 主题、手柄、鼠标、准星、显示、音效设置 |
+| 登录页 | `/login` | 邮箱验证码登录 |
+| 注册页 | `/register` | 用户注册 |
+| 找回密码 | `/forgot-password` | 密码重置 |
+
+### 11.12 布局与导航
+
+| 功能 | 说明 |
+|------|------|
+| **固定顶部导航栏** | Logo + 导航链接 + 认证区 + 语言/主题切换 |
+| **导航高亮** | 当前页面链接高亮显示 |
+| **训练时隐藏 Header** | `/training?task=xxx` 时自动隐藏导航栏，全屏画布 |
+| **任务选择时显示 Header** | `/training`（无 task 参数）时正常显示导航栏 |
+| **响应式布局** | Tailwind CSS 响应式断点适配 |
+
+---
+
 ## 附录 A：技术选型总览
 
 | 层级 | 技术 | 版本 | 用途 |
 |------|------|------|------|
 | 框架 | React | 18 | UI 开发 |
 | 语言 | TypeScript | 5.x | 类型安全 |
-| 状态 | Zustand | 4.x | 轻量状态管理 |
-| 路由 | React Router | v6 | 页面路由 |
-| 样式 | TailwindCSS | 3.x | 原子化 CSS |
-| 3D | Babylon.js | 6.x | 3D 渲染引擎 |
-| 图表 | Recharts | 2.x | 数据可视化 |
-| 构建 | Vite | 5.x | 构建工具 |
+| 状态 | Zustand | 4.x | 轻量状态管理（persist 中间件） |
+| 路由 | React Router | v6 | 页面路由（嵌套路由、URL 参数） |
+| 样式 | TailwindCSS | 3.x | 原子化 CSS + CSS 自定义属性主题 |
+| 3D | Babylon.js | 6.x | 3D 渲染引擎（@babylonjs/core/gui/loaders/materials） |
+| 日期 | dayjs | 最新 | 日期处理 |
+| 工具 | lodash-es | 最新 | 工具函数 |
+| 测试 | Vitest | 最新 | 单元测试框架 |
+| 构建 | Vite | 5.x | 构建工具 + 开发服务器 |
 | 部署 | Vercel/CF Pages | - | 边缘部署 |
 
 ---
 
-## 附录 B：开发里程碑
+## 附录 B：开发里程碑与完成情况
 
-### Phase 1：MVP 核心功能（4-6 周）
+### Phase 1：MVP 核心功能 ✅ 已完成
 
-- [x] 项目初始化与基础架构
+- [x] 项目初始化与基础架构（Vite + React 18 + TypeScript）
 - [x] Babylon.js 引擎集成与基础场景
 - [x] Gamepad API 接入与输入抽象层
-- [x] Gridshot 训练任务实现
-- [x] SphereTrack 跟枪任务实现
+- [x] Gridshot 训练任务实现（静态点射）
+- [x] SphereTrack 跟枪任务实现（跟枪训练）
 - [x] 本地成绩记录（IndexedDB）
 - [x] 基础 UI 界面（首页、训练页、结果页）
+- [x] 训练任务选择界面（6个预设任务）
+- [x] 训练 HUD（分数、时间、命中率、FPS）
+- [x] 训练结果面板
 
-### Phase 2：功能完善（6-8 周）
+### Phase 2：功能完善 ✅ 已完成
 
-- [ ] 完整训练任务库（6-8 个任务）
-- [x] 数据统计仪表板
+- [x] 完整训练任务库（6个任务：Gridshot、Spidershot、SphereTrack、StrafeTrack、TargetSwitch、ReflexShot）
+- [x] 数据统计仪表板（Statistics 页面）
+- [x] 用户系统与云端存储（邮箱验证码认证 + JWT）
+- [x] 准星自定义功能（样式、颜色、大小）
+- [x] 手柄灵敏度曲线配置（死区、灵敏度、Y轴反转）
+- [x] 8 套主题切换（深黑、午夜蓝、森林绿、皇家紫、中国红、纯白、暖奶油、冷灰）
+- [x] 多语言支持（中文/英文，约 170 个翻译键）
+- [x] 5 级游戏难度系统（容易/简单/普通/困难/地狱，每个任务独立存储）
+- [x] 暂停/恢复系统（ESC 暂停、Pointer Lock 集成、难度选择）
+- [x] 目标过期机制（困难 2s、地狱 1.2s 未击中自动消失并计入脱靶）
+- [x] 设置云端同步（保存到云端 / 从云端加载）
+- [x] 主题感知 UI（所有组件通过 CSS 变量跟随主题）
+- [x] 导航栏条件隐藏（训练中自动隐藏，任务选择时显示）
 - [ ] 自定义任务系统
-- [ ] 用户系统与云端存储
-- [x] 准星自定义功能
-- [ ] 手柄灵敏度曲线配置
 
-### Phase 3：社交与进阶（4-6 周）
+### Phase 3：社交与进阶 ⏳ 待开始
 
 - [ ] 排行榜系统
 - [ ] 好友功能与成绩对比
 - [ ] 任务分享功能
 - [ ] 成就系统
-- [ ] 多语言支持
 
-### Phase 4：优化与扩展（持续迭代）
+### Phase 4：优化与扩展 ⏳ 待开始
 
 - [ ] 性能优化与移动端适配
 - [ ] AI 训练建议（根据弱项推荐任务）
@@ -1699,6 +1882,274 @@ scene.postProcessesEnabled = false; // 关闭后处理
 
 ---
 
-**文档版本**：v1.0
-**最后更新**：2026-04-30
+## 附录 C：已完成模块详细清单
+
+### C.1 前端核心架构
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 应用入口 | `src/App.tsx` | ✅ | React Router 路由配置 |
+| 主入口 | `src/main.tsx` | ✅ | 应用挂载点 |
+| 构建配置 | `vite.config.ts` | ✅ | Vite + React + 路径别名 |
+| 类型配置 | `tsconfig.json` | ✅ | TypeScript 严格模式 |
+| 样式配置 | `tailwind.config.js` | ✅ | 自定义主题色、字体 |
+
+### C.2 游戏引擎模块
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 游戏引擎 | `src/game/engine/GameEngine.ts` | ✅ | Babylon.js 引擎封装，Pointer Lock 集成，画质档位（low/medium/high/ultra），FPS 监控 |
+| 基础场景 | `src/game/scenes/BaseScene.ts` | ✅ | 训练场景基类：目标生成（红色发光球体 + GlowLayer）、光线投射击中检测、难度系统（targetSizeMultiplier + targetLifetime）、目标过期机制、分数计算 |
+| Gridshot 场景 | `src/game/scenes/GridshotScene.ts` | ✅ | 网格点射训练：墙面网格线、随机位置生成、支持 Gridshot 和 Spidershot 两种任务 |
+| SphereTrack 场景 | `src/game/scenes/SphereTrackScene.ts` | ✅ | 跟踪训练：椭圆轨道运动、光标/目标位置记录、平滑度评分（jerk + 跟踪误差） |
+
+### C.3 输入系统
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 手柄适配器 | `src/game/input/GamepadAdapter.ts` | ✅ | 手柄状态管理、死区处理、类型自动检测 |
+| 输入管理器 | `src/game/input/InputManager.ts` | ✅ | 统一鼠标/手柄输入、边沿检测 |
+| 手柄映射 | `src/utils/gamepadMap.ts` | ✅ | Xbox/PS/Switch 按键映射 |
+| 输入平滑 | `src/utils/inputSmoother.ts` | ✅ | 移动平均缓冲区减少摇杆抖动 |
+| 手柄 Hook | `src/hooks/useGamepad.ts` | ✅ | React Hook 封装，每帧轮询 |
+
+### C.3.1 训练 Hooks
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 训练生命周期 | `src/hooks/useTraining.ts` | ✅ | idle→loading→playing→paused→completed 状态机；per-task 难度（localStorage）；requestAnimationFrame 渲染循环；暂停/恢复时间追踪；Canvas 清除 |
+| 统计分析 | `src/hooks/useStatistics.ts` | ✅ | useStatistics（汇总）、useTaskStats（分任务）、useTimeSeriesData（时间序列） |
+| 主题与国际化 | `src/hooks/useTheme.ts` | ✅ | useTheme（设置 data-theme 属性）、useLocale（返回当前语言字典） |
+
+### C.4 状态管理
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 游戏状态 | `src/stores/gameStore.ts` | ✅ | 实时训练数据（hits/misses/score/fps） |
+| 认证状态 | `src/stores/authStore.ts` | ✅ | 用户认证、JWT 管理，登录/注册/重置密码 |
+| 设置状态 | `src/stores/settingsStore.ts` | ✅ | 全部用户偏好（主题/手柄/鼠标/准星/显示/音效），LocalStorage 持久化，云端同步（loadFromServer/syncToServer） |
+
+### C.5 类型定义
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 手柄类型 | `src/types/gamepad.ts` | ✅ | GamepadType、ButtonMapping |
+| 训练类型 | `src/types/training.ts` | ✅ | TaskType、GameDifficulty（5 级）、GAME_DIFFICULTY_CONFIG、TrainingTaskConfig（6 个预设任务）、TrainingResult |
+| 统计类型 | `src/types/statistics.ts` | ✅ | TrainingStats、TaskStats、SkillRadar、TimeSeriesData |
+| 认证类型 | `src/types/auth.ts` | ✅ | User、AuthResponse、SendCodeRequest、RegisterRequest、LoginRequest、ResetPasswordRequest |
+| 主题类型 | `src/types/theme.ts` | ✅ | ThemeId（8 个）、THEMES 配置（含预览色） |
+| 国际化类型 | `src/types/locale.ts` | ✅ | 中英文翻译键值对（约 170 键） |
+
+### C.6 工具函数
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 评分算法 | `src/utils/scoring.ts` | ✅ | 静态点击评分（准确率/速度/一致性加权）、跟枪平滑度（jerk + 跟踪误差） |
+| IndexedDB 存储 | `src/utils/storage.ts` | ✅ | TrainingStorage 类：saveRecord、getRecords（按任务/数量过滤）、getBestScore、deleteRecord、clearAll |
+| 手柄映射 | `src/utils/gamepadMap.ts` | ✅ | 手柄类型检测（Xbox/PS/Switch）、按键映射（含 Nintendo A/B 交换） |
+| 输入平滑 | `src/utils/inputSmoother.ts` | ✅ | InputSmoother（标量移动平均）、VectorSmoother（2D 向量平滑） |
+
+### C.7 页面组件
+
+| 页面 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 首页 | `src/pages/Home.tsx` | ✅ | 项目介绍、功能卡片、热门任务、使用指南 |
+| 训练页 | `src/pages/Training.tsx` | ✅ | 任务选择网格、3D 画布、倒计时、暂停菜单（含难度选择）、结果面板 |
+| 统计页 | `src/pages/Statistics.tsx` | ✅ | 任务筛选、汇总卡片、性能指标、分数图表、任务统计表 |
+| 设置页 | `src/pages/Settings.tsx` | ✅ | 主题（8 个）、手柄、鼠标、准星、显示、音效设置，云端同步 |
+| 登录页 | `src/pages/Login.tsx` | ✅ | 邮箱验证码登录、60 秒冷却、演示模式 |
+| 注册页 | `src/pages/Register.tsx` | ✅ | 邮箱 + 用户名 + 验证码注册，注册后自动同步设置 |
+| 找回密码 | `src/pages/ForgotPassword.tsx` | ✅ | 邮箱 + 验证码 + 新密码重置 |
+
+### C.8 UI 组件
+
+| 组件 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 按钮 | `src/components/ui/Button.tsx` | ✅ | primary/secondary/danger/ghost 变体，sm/md/lg，加载动画 |
+| 卡片 | `src/components/ui/Card.tsx` | ✅ | default/elevated/bordered 变体，hoverable，主题感知 CSS 变量 |
+| 徽章 | `src/components/ui/Badge.tsx` | ✅ | default/success/warning/danger/info 变体 |
+| 准星 | `src/components/hud/Crosshair.tsx` | ✅ | dot/cross/circle 三种样式，颜色/大小可配置 |
+| 训练 HUD | `src/components/hud/TrainingHUD.tsx` | ✅ | 顶部：分数、倒计时、命中率；左下：命中数、脱靶数、FPS |
+| 训练结果 | `src/components/hud/TrainingResultPanel.tsx` | ✅ | 全屏模态：最终分数、命中率、击杀数、反应时间、时长 |
+| 主题切换 | `src/components/ui/ThemeSwitcher.tsx` | ✅ | 下拉选择器，颜色预览圆点，主题感知样式 |
+| 语言切换 | `src/components/ui/LanguageSwitcher.tsx` | ✅ | 中英文切换按钮 |
+| 用户菜单 | `src/components/ui/UserMenu.tsx` | ✅ | 头像下拉菜单，用户名/邮箱，登出 |
+| 头部导航 | `src/components/layout/Header.tsx` | ✅ | 固定顶部导航栏，backdrop blur，活跃链接高亮 |
+| 布局 | `src/components/layout/Layout.tsx` | ✅ | 训练时隐藏 Header（`/training?task=xxx`），任务选择时显示 |
+
+### C.9 后端 API
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 服务入口 | `server/src/index.ts` | ✅ | Express 服务器 |
+| 数据库 | `server/src/db.ts` | ✅ | MySQL 连接池 |
+| Redis | `server/src/redis.ts` | ✅ | Redis 缓存连接 |
+| 配置 | `server/src/config.ts` | ✅ | 环境变量配置 |
+| 认证路由 | `server/src/routes/auth.ts` | ✅ | 注册/登录/验证码/重置密码 |
+| 设置路由 | `server/src/routes/settings.ts` | ✅ | 用户设置同步 |
+| 认证中间件 | `server/src/middleware/auth.ts` | ✅ | JWT 验证 |
+
+### C.10 部署与 DevOps
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 前端 Dockerfile | `Dockerfile` | ✅ | Nginx 静态服务 |
+| 后端 Dockerfile | `server/Dockerfile` | ✅ | Node.js API 服务 |
+| Docker Compose | `docker-compose.yml` | ✅ | 完整服务编排 |
+| Nginx 配置 | `nginx.conf` | ✅ | 反向代理、SPA 路由 |
+| MySQL 配置 | `config/mysql/custom.cnf` | ✅ | 性能优化配置 |
+| Redis 配置 | `config/redis/redis.conf` | ✅ | 持久化、安全配置 |
+| CI/CD | `.github/workflows/deploy.yml` | ✅ | GitHub Actions 自动化 |
+| 环境变量 | `.env.example` | ✅ | 配置模板 |
+
+### C.11 API 客户端
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| API 客户端 | `src/api/client.ts` | ✅ | 基础 URL `/api`，自动附加 Bearer token，get/post/put 方法 |
+| 认证 API | `src/api/auth.ts` | ✅ | POST /auth/send-code、/register、/login、/reset-password，GET /auth/me |
+| 设置 API | `src/api/settings.ts` | ✅ | GET/PUT /settings，ServerSettings 接口（snake_case 转换） |
+
+### C.12 样式与主题
+
+| 模块 | 文件路径 | 状态 | 说明 |
+|------|----------|------|------|
+| 设计令牌 | `src/styles/tokens.css` | ✅ | CSS 自定义属性（颜色、间距、圆角、字体、阴影） |
+| 主题系统 | `src/styles/themes.css` | ✅ | 8 套完整主题的 CSS 变量定义（含 RGB 变体） |
+| 全局样式 | `src/styles/global.css` | ✅ | 自定义滚动条、选中色、字体覆盖、关键帧动画（pulse-glow/slide-up/fade-in/float） |
+
+---
+
+## 附录 D：技术架构图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        AimPad 架构                          │
+├─────────────────────────────────────────────────────────────┤
+│  用户层                                                      │
+│  ├── 浏览器 (Chrome/Firefox/Edge)                           │
+│  ├── 手柄 (Xbox/PS/Switch Pro)                              │
+│  └── 键鼠                                                    │
+├─────────────────────────────────────────────────────────────┤
+│  前端层 (React + TypeScript + Vite)                         │
+│  ├── UI 组件 (TailwindCSS)                                  │
+│  ├── 状态管理 (Zustand)                                      │
+│  ├── 路由 (React Router v6)                                 │
+│  ├── 3D 引擎 (Babylon.js)                                   │
+│  └── 输入系统 (Gamepad API + 抽象层)                        │
+├─────────────────────────────────────────────────────────────┤
+│  后端层 (Node.js + Express)                                 │
+│  ├── 认证服务 (JWT + 邮箱验证码)                            │
+│  ├── 设置同步 API                                           │
+│  └── 健康检查                                               │
+├─────────────────────────────────────────────────────────────┤
+│  数据层                                                      │
+│  ├── MySQL 8.0 (用户数据、训练记录)                         │
+│  └── Redis 7.x (验证码缓存、会话)                          │
+├─────────────────────────────────────────────────────────────┤
+│  部署层                                                      │
+│  ├── Docker Compose (服务编排)                              │
+│  ├── Nginx (反向代理、静态文件)                             │
+│  ├── 华为云 SWR (镜像仓库)                                  │
+│  └── GitHub Actions (CI/CD)                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 附录 E：环境变量配置
+
+### E.1 前端环境变量
+
+```bash
+# .env
+VITE_API_URL=http://localhost:3001
+VITE_WS_URL=ws://localhost:3001
+```
+
+### E.2 后端环境变量
+
+```bash
+# server/.env
+PORT=3001
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=aimpad_user
+DB_PASSWORD=your_password
+DB_NAME=aimpad
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=your_redis_password
+JWT_SECRET=your_jwt_secret_at_least_32_chars
+JWT_EXPIRES_IN=7d
+DEMO_CODE=888888
+```
+
+### E.3 Docker 环境变量
+
+```bash
+# .env (项目根目录)
+MYSQL_ROOT_PASSWORD=your_strong_root_password
+MYSQL_PASSWORD=your_strong_user_password
+REDIS_PASSWORD=your_strong_redis_password
+JWT_SECRET=your_strong_jwt_secret_at_least_32_chars
+```
+
+---
+
+## 附录 F：快速启动指南
+
+### F.1 本地开发
+
+```bash
+# 克隆项目
+git clone https://github.com/jiangdongshi/AimPad.git
+cd AimPad
+
+# 安装前端依赖
+npm install
+
+# 安装后端依赖
+cd server
+npm install
+cd ..
+
+# 启动后端（需要 MySQL 和 Redis）
+cd server
+npm run dev
+
+# 启动前端
+npm run dev
+```
+
+### F.2 Docker 部署
+
+```bash
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 填写密码
+
+# 启动所有服务
+docker compose up -d
+
+# 查看日志
+docker compose logs -f
+
+# 停止服务
+docker compose down
+```
+
+### F.3 访问地址
+
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| 前端 | http://localhost | 主应用 |
+| API | http://localhost:3001 | 后端接口 |
+| 健康检查 | http://localhost:3001/api/health | 服务状态 |
+
+---
+
+**文档版本**：v3.0
+**最后更新**：2026-05-02
 **维护者**：@jiangdongshi
+**项目仓库**：https://github.com/jiangdongshi/AimPad
