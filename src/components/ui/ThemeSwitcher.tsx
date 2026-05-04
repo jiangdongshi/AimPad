@@ -64,8 +64,8 @@ export function ThemeSwitcher() {
           className="absolute right-0 top-full mt-2 w-56 rounded-lg shadow-2xl z-50 py-1 animate-fade-in"
           style={{
             backgroundColor: 'var(--color-bg-surface)',
-            border: '1px solid var(--color-accent)',
-            boxShadow: '0 0 30px rgba(var(--tw-accent-rgb) / 0.15), var(--shadow-lg)',
+            border: '1px solid #2563EB',
+            boxShadow: '0 0 30px rgba(37, 99, 235, 0.22), var(--shadow-lg)',
           }}
         >
           {THEMES.map((t) => {
@@ -105,7 +105,7 @@ export function ThemeSwitcher() {
                   <div className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{t.description}</div>
                 </div>
                 {isActive && (
-                  <svg className="w-4 h-4 shrink-0 ml-auto" style={{ color: 'var(--color-accent)' }} fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 shrink-0 ml-auto" style={{ color: '#2563EB' }} fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 )}

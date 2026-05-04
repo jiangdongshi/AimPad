@@ -31,35 +31,42 @@ export class GamepadAdapter {
 
   update(gamepad: Gamepad | null): GamepadState {
     if (!gamepad) {
-      this.state.connected = false;
+      const prev = this.state;
+      this.state = { ...prev, connected: false };
       return this.state;
     }
 
     if (!this.mapping || this.state.id !== gamepad.id) {
       this.mapping = getButtonMapping(gamepad);
-      this.state.type = detectGamepadType(gamepad);
-      this.state.id = gamepad.id;
-      this.state.connected = true;
     }
 
     // 更新摇杆状态（带死区处理）
-    this.state.leftStick = this.applyDeadzone({
+    const leftStick = this.applyDeadzone({
       x: gamepad.axes[0] || 0,
       y: gamepad.axes[1] || 0,
     });
-    this.state.rightStick = this.applyDeadzone({
+    const rightStick = this.applyDeadzone({
       x: gamepad.axes[2] || 0,
       y: gamepad.axes[3] || 0,
     });
 
     // 更新按钮状态
+    const buttons: Record<string, { pressed: boolean; value: number }> = {};
     gamepad.buttons.forEach((button, index) => {
-      this.state.buttons[index] = {
+      buttons[index] = {
         pressed: button.pressed,
         value: button.value,
       };
     });
 
+    this.state = {
+      connected: true,
+      type: detectGamepadType(gamepad),
+      id: gamepad.id,
+      leftStick,
+      rightStick,
+      buttons,
+    };
     return this.state;
   }
 

@@ -1,6 +1,8 @@
 import * as BABYLON from '@babylonjs/core';
 import { GameEngine } from '../engine/GameEngine';
 import type { TrainingResult } from '@/types/training';
+import { getSceneGroundColor } from '@/utils/themeColors';
+import { getButtonIndex } from '@/utils/gamepadMap';
 
 export abstract class BaseScene {
   protected engine: GameEngine;
@@ -14,6 +16,13 @@ export abstract class BaseScene {
   // 难度配置
   protected targetLifetime: number = 0; // 0 表示无限制
   protected targetSizeMultiplier: number = 1.0;
+
+  // 目标小球颜色（默认淡蓝色 #ADD8E6）
+  protected targetColor: BABYLON.Color3 = new BABYLON.Color3(0.68, 0.85, 0.9);
+
+  // 手柄开火按键
+  protected fireButtonName: string = 'RT';
+  private prevFirePressed: boolean = false;
 
   // 统计数据
   protected hits: number = 0;
@@ -70,18 +79,42 @@ export abstract class BaseScene {
 
   protected setupShooting() {
     this.scene.onPointerDown = (_evt) => {
-      if (!this.isActive) return;
-
-      // 从摄像机中心发射射线（准星位置）
-      const ray = this.camera.getForwardRay(100);
-
-      const hit = this.scene.pickWithRay(ray);
-      if (hit?.pickedMesh?.metadata?.isTarget) {
-        this.onTargetHit(hit.pickedMesh as BABYLON.Mesh);
-      } else {
-        this.misses++;
-      }
+      this.tryShoot();
     };
+  }
+
+  protected tryShoot() {
+    if (!this.isActive) return false;
+    const ray = this.camera.getForwardRay(100);
+    const hit = this.scene.pickWithRay(ray, (mesh) => mesh.metadata?.isTarget === true, false);
+    if (hit?.pickedMesh) {
+      this.onTargetHit(hit.pickedMesh as BABYLON.Mesh);
+      return true;
+    } else {
+      this.misses++;
+      return false;
+    }
+  }
+
+  setFireButton(name: string) {
+    this.fireButtonName = name;
+  }
+
+  /** 每帧调用，检测手柄开火按键 */
+  checkGamepadFire() {
+    if (!this.isActive) return;
+    const gamepads = navigator.getGamepads();
+    for (const gp of gamepads) {
+      if (!gp) continue;
+      const idx = getButtonIndex(gp, this.fireButtonName as keyof import('@/types/gamepad').ButtonMapping);
+      if (idx === undefined) continue;
+      const pressed = gp.buttons[idx]?.pressed ?? false;
+      if (pressed && !this.prevFirePressed) {
+        this.tryShoot();
+      }
+      this.prevFirePressed = pressed;
+      break;
+    }
   }
 
   protected onTargetHit(mesh: BABYLON.Mesh) {
@@ -94,7 +127,7 @@ export abstract class BaseScene {
   protected spawnTarget(position: BABYLON.Vector3, size: number = 1): BABYLON.Mesh {
     const target = BABYLON.MeshBuilder.CreateSphere(
       `target-${Date.now()}`,
-      { diameter: size },
+      { diameter: size, segments: 16 },
       this.scene
     );
     target.position = position;
@@ -103,16 +136,13 @@ export abstract class BaseScene {
       spawnTime: performance.now(),
     };
 
-    // 高亮材质
+    // 纯色材质，无光照阴影
     const material = new BABYLON.StandardMaterial(`targetMat-${Date.now()}`, this.scene);
-    material.emissiveColor = new BABYLON.Color3(1, 0.3, 0.3);
-    material.diffuseColor = new BABYLON.Color3(1, 0.2, 0.2);
-    material.specularColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+    material.diffuseColor = this.targetColor;
+    material.emissiveColor = this.targetColor;
+    material.specularColor = BABYLON.Color3.Black();
+    material.disableLighting = true;
     target.material = material;
-
-    // 光晕效果
-    const glowLayer = new BABYLON.GlowLayer('glow', this.scene);
-    glowLayer.intensity = 0.5;
 
     this.targets.push(target);
     return target;
@@ -156,7 +186,7 @@ export abstract class BaseScene {
     );
     ground.position.y = 0;
     const groundMat = new BABYLON.StandardMaterial('groundMat', this.scene);
-    groundMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.15);
+    groundMat.diffuseColor = getSceneGroundColor();
     groundMat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
     ground.material = groundMat;
     ground.receiveShadows = true;
@@ -167,6 +197,23 @@ export abstract class BaseScene {
   setDifficulty(targetSizeMultiplier: number, targetLifetime: number) {
     this.targetSizeMultiplier = targetSizeMultiplier;
     this.targetLifetime = targetLifetime;
+  }
+
+  // 设置目标小球颜色（接受 hex 字符串如 '#ADD8E6'）
+  setTargetColor(hex: string) {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    this.targetColor = new BABYLON.Color3(r, g, b);
+
+    // 立即更新已有目标的颜色
+    for (const target of this.targets) {
+      const mat = target.material as BABYLON.StandardMaterial;
+      if (mat?.diffuseColor) {
+        mat.diffuseColor = this.targetColor;
+        mat.emissiveColor = this.targetColor;
+      }
+    }
   }
 
   // 检查过期目标（困难/地狱模式）

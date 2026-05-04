@@ -2,6 +2,7 @@ import * as BABYLON from '@babylonjs/core';
 import { BaseScene } from './BaseScene';
 import { GameEngine } from '../engine/GameEngine';
 import { calculateSmoothness } from '@/utils/scoring';
+import { getSceneGridColor } from '@/utils/themeColors';
 
 interface SphereTrackConfig {
   targetSize: number;
@@ -67,8 +68,8 @@ export class SphereTrackScene extends BaseScene {
       y: this.scene.pointerY,
     });
 
-    // 检查训练时间
-    if (now - this.startTime > this.config.duration) {
+    // 检查训练时间（duration=0 表示不限时间）
+    if (this.config.duration > 0 && now - this.startTime > this.config.duration) {
       this.stop();
     }
   }
@@ -76,21 +77,18 @@ export class SphereTrackScene extends BaseScene {
   private createTrackingTarget() {
     this.trackingTarget = BABYLON.MeshBuilder.CreateSphere(
       'trackTarget',
-      { diameter: this.config.targetSize * this.targetSizeMultiplier },
+      { diameter: this.config.targetSize * this.targetSizeMultiplier, segments: 16 },
       this.scene
     );
     this.trackingTarget.position = new BABYLON.Vector3(0, 6, 8);
 
-    // 跟踪目标材质（绿色）
+    // 纯色材质，无光照阴影
     const material = new BABYLON.StandardMaterial('trackTargetMat', this.scene);
-    material.emissiveColor = new BABYLON.Color3(0, 1, 0.5);
-    material.diffuseColor = new BABYLON.Color3(0, 0.8, 0.3);
-    material.alpha = 0.9;
+    material.diffuseColor = this.targetColor;
+    material.emissiveColor = this.targetColor;
+    material.specularColor = BABYLON.Color3.Black();
+    material.disableLighting = true;
     this.trackingTarget.material = material;
-
-    // 光晕
-    const glowLayer = new BABYLON.GlowLayer('glow', this.scene);
-    glowLayer.intensity = 0.4;
   }
 
   private createTrackGuide() {
@@ -112,7 +110,7 @@ export class SphereTrackScene extends BaseScene {
       { points },
       this.scene
     );
-    trackLine.color = new BABYLON.Color3(0.2, 0.2, 0.3);
+    trackLine.color = getSceneGridColor();
   }
 
   private worldToScreen(worldPos: BABYLON.Vector3): { x: number; y: number } {

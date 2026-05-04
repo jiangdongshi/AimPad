@@ -17,6 +17,7 @@ interface SettingsState {
   gamepadDeadzone: number;
   gamepadSensitivity: number;
   gamepadInvertY: boolean;
+  gamepadFireButton: string;
 
   // 鼠标设置
   mouseSensitivity: number;
@@ -50,6 +51,7 @@ const DEFAULT_SETTINGS = {
   gamepadDeadzone: 0.1,
   gamepadSensitivity: 1.0,
   gamepadInvertY: false,
+  gamepadFireButton: 'RT',
   mouseSensitivity: 1.0,
   mouseInvertY: false,
   crosshairStyle: 'dot' as const,
@@ -76,6 +78,7 @@ function pickSettings(server: ServerSettings) {
     gamepadDeadzone: server.gamepadDeadzone,
     gamepadSensitivity: server.gamepadSensitivity,
     gamepadInvertY: server.gamepadInvertY,
+    gamepadFireButton: server.gamepadFireButton,
     mouseSensitivity: server.mouseSensitivity,
     mouseInvertY: server.mouseInvertY,
   };
@@ -96,6 +99,7 @@ function toServerPayload(state: SettingsState) {
     gamepad_deadzone: state.gamepadDeadzone,
     gamepad_sensitivity: state.gamepadSensitivity,
     gamepad_invert_y: state.gamepadInvertY ? 1 : 0,
+    gamepad_fire_button: state.gamepadFireButton,
     mouse_sensitivity: state.mouseSensitivity,
     mouse_invert_y: state.mouseInvertY ? 1 : 0,
   };
@@ -152,6 +156,7 @@ export const useSettingsStore = create<SettingsState>()(
         gamepadDeadzone: state.gamepadDeadzone,
         gamepadSensitivity: state.gamepadSensitivity,
         gamepadInvertY: state.gamepadInvertY,
+        gamepadFireButton: state.gamepadFireButton,
         mouseSensitivity: state.mouseSensitivity,
         mouseInvertY: state.mouseInvertY,
         crosshairStyle: state.crosshairStyle,

@@ -9,6 +9,7 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'nav.training': 'Training',
     'nav.statistics': 'Statistics',
     'nav.settings': 'Settings',
+    'nav.gamepad': 'Gamepad Test',
     'header.subtitle': 'Web 端专业瞄准训练平台',
 
     // Home
@@ -41,6 +42,13 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'training.resume': 'Resume',
     'training.restart': 'Restart',
     'training.escPause': 'ESC to Pause',
+    'training.ballColor': 'Ball Color',
+    'training.currentDifficulty': 'Difficulty: {difficulty}',
+    'training.duration': 'Duration',
+    'training.duration.30s': '30s',
+    'training.duration.45s': '45s',
+    'training.duration.60s': '60s',
+    'training.duration.unlimited': 'Unlimited',
     'training.targets': 'targets',
     'training.clickToLock': 'Click to lock mouse',
     'training.clickToStart': 'Click to start training',
@@ -93,6 +101,7 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'settings.gamepad.deadzone': 'Deadzone',
     'settings.gamepad.sensitivity': 'Sensitivity',
     'settings.gamepad.invertY': 'Invert Y Axis',
+    'settings.gamepad.fireButton': 'Fire Button',
     'settings.mouse': 'Mouse Settings',
     'settings.mouse.sensitivity': 'Sensitivity',
     'settings.mouse.invertY': 'Invert Y Axis',
@@ -175,6 +184,18 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'auth.resetSuccess': 'Password reset successfully, redirecting to login...',
     'auth.passwordMismatch': 'Passwords do not match',
     'auth.passwordTooShort': 'Password must be at least 6 characters',
+
+    // Gamepad
+    'gamepad.title': 'Gamepad Detection',
+    'gamepad.connected': 'Connected',
+    'gamepad.disconnected': 'Disconnected',
+    'gamepad.type': 'Type',
+    'gamepad.name': 'Device Name',
+    'gamepad.leftStick': 'Left Stick',
+    'gamepad.rightStick': 'Right Stick',
+    'gamepad.buttons': 'Buttons',
+    'gamepad.notConnected': 'No gamepad detected. Connect a gamepad via USB or Bluetooth.',
+    'gamepad.pressAny': 'Press buttons or move sticks to test',
   },
   zh: {
     // Header
@@ -182,6 +203,7 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'nav.training': '训练',
     'nav.statistics': '数据',
     'nav.settings': '设置',
+    'nav.gamepad': '手柄检测',
     'header.subtitle': 'Web 端专业瞄准训练平台',
 
     // Home
@@ -214,6 +236,13 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'training.resume': '继续',
     'training.restart': '重新开始',
     'training.escPause': '按 ESC 暂停',
+    'training.ballColor': '小球颜色',
+    'training.currentDifficulty': '当前难度：{difficulty}',
+    'training.duration': '训练时长',
+    'training.duration.30s': '30秒',
+    'training.duration.45s': '45秒',
+    'training.duration.60s': '60秒',
+    'training.duration.unlimited': '不限时间',
     'training.targets': '个目标',
     'training.clickToLock': '点击锁定鼠标',
     'training.clickToStart': '点击开始训练',
@@ -266,6 +295,7 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'settings.gamepad.deadzone': '死区',
     'settings.gamepad.sensitivity': '灵敏度',
     'settings.gamepad.invertY': '反转 Y 轴',
+    'settings.gamepad.fireButton': '开火按键',
     'settings.mouse': '鼠标设置',
     'settings.mouse.sensitivity': '灵敏度',
     'settings.mouse.invertY': '反转 Y 轴',
@@ -348,5 +378,17 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'auth.resetSuccess': '密码重置成功，正在跳转到登录页...',
     'auth.passwordMismatch': '两次密码输入不一致',
     'auth.passwordTooShort': '密码至少需要 6 个字符',
+
+    // Gamepad
+    'gamepad.title': '手柄检测',
+    'gamepad.connected': '已连接',
+    'gamepad.disconnected': '未连接',
+    'gamepad.type': '类型',
+    'gamepad.name': '设备名称',
+    'gamepad.leftStick': '左摇杆',
+    'gamepad.rightStick': '右摇杆',
+    'gamepad.buttons': '按钮',
+    'gamepad.notConnected': '未检测到手柄。请通过 USB 或蓝牙连接手柄。',
+    'gamepad.pressAny': '按下按钮或移动摇杆进行测试',
   },
 };
