@@ -13,6 +13,7 @@ export interface ServerSettings {
   gamepadDeadzone: number;
   gamepadSensitivity: number;
   gamepadInvertY: boolean;
+  gamepadFireButton: string;
   mouseSensitivity: number;
   mouseInvertY: boolean;
   updatedAt: string;

@@ -8,6 +8,7 @@ import { Settings } from '@/pages/Settings';
 import { Login } from '@/pages/Login';
 import { Register } from '@/pages/Register';
 import { ForgotPassword } from '@/pages/ForgotPassword';
+import { Gamepad } from '@/pages/Gamepad';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -33,6 +34,7 @@ function AppInner() {
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
           <Route path="forgot-password" element={<ForgotPassword />} />
+          <Route path="gamepad" element={<Gamepad />} />
         </Route>
       </Routes>
     </Router>

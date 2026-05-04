@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useAuthStore } from '@/stores/authStore';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -6,12 +7,24 @@ import { useLocale } from '@/hooks/useTheme';
 import { THEMES } from '@/types/theme';
 import type { ThemeId } from '@/types/theme';
 
+const FIRE_BUTTON_OPTIONS: { value: string; label: string }[] = [
+  { value: 'RT', label: 'RT' },
+  { value: 'RB', label: 'RB' },
+  { value: 'LT', label: 'LT' },
+  { value: 'LB', label: 'LB' },
+  { value: 'A', label: 'A (×)' },
+  { value: 'B', label: 'B (○)' },
+  { value: 'X', label: 'X (□)' },
+  { value: 'Y', label: 'Y (△)' },
+];
+
 export function Settings() {
   const {
     theme,
     gamepadDeadzone,
     gamepadSensitivity,
     gamepadInvertY,
+    gamepadFireButton,
     mouseSensitivity,
     mouseInvertY,
     crosshairStyle,
@@ -30,6 +43,32 @@ export function Settings() {
 
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const locale = useLocale();
+
+  const [showFireButtonPopup, setShowFireButtonPopup] = useState(false);
+
+  const handleOutsideClick = useCallback((e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('[data-fire-button-popup]')) {
+      setShowFireButtonPopup(false);
+    }
+  }, []);
+
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setShowFireButtonPopup(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showFireButtonPopup) {
+      document.addEventListener('click', handleOutsideClick, true);
+      document.addEventListener('keydown', handleEscape);
+    }
+    return () => {
+      document.removeEventListener('click', handleOutsideClick, true);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showFireButtonPopup, handleOutsideClick, handleEscape]);
 
   const syncStatusText = {
     idle: '',
@@ -73,6 +112,14 @@ export function Settings() {
         </div>
       </div>
 
+      <style>{`
+        input[type='range'] {
+          accent-color: #2563EB;
+        }
+        input[type='checkbox'] {
+          accent-color: #2563EB;
+        }
+      `}</style>
       <div className="space-y-6">
         {/* 主题设置 */}
         <Card>
@@ -90,13 +137,13 @@ export function Settings() {
                     className="flex flex-col items-center gap-2 p-3 rounded-lg transition-all"
                     style={{
                       border: selected
-                        ? '2px solid var(--color-accent)'
+                        ? '2px solid #2563EB'
                         : '1px solid var(--color-bg-surface-hover)',
                       backgroundColor: selected
-                        ? 'var(--color-bg-surface-hover)'
+                        ? 'rgba(37, 99, 235, 0.15)'
                         : 'var(--color-bg-surface)',
                       boxShadow: selected
-                        ? '0 0 16px rgba(var(--tw-accent-rgb) / 0.2)'
+                        ? '0 0 16px rgba(37, 99, 235, 0.25)'
                         : 'none',
                       transition: 'all 0.2s ease',
                     }}
@@ -189,6 +236,63 @@ export function Settings() {
                 {locale['settings.gamepad.invertY']}
               </label>
             </div>
+            <div>
+              <label className="block text-sm text-text-secondary mb-2">
+                {locale['settings.gamepad.fireButton']}
+              </label>
+              <div className="relative inline-block" data-fire-button-popup>
+                <button
+                  onClick={() => setShowFireButtonPopup(!showFireButtonPopup)}
+                  className="px-5 py-2.5 rounded-xl text-sm font-medium inline-flex items-center gap-2"
+                  style={{
+                    backgroundColor: 'var(--color-bg-surface-hover)',
+                    color: '#2563EB',
+                    border: '1px solid #2563EB',
+                    fontWeight: 700,
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {FIRE_BUTTON_OPTIONS.find(o => o.value === gamepadFireButton)?.label || gamepadFireButton}
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: showFireButtonPopup ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}>
+                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+
+                {showFireButtonPopup && (
+                  <div
+                    className="absolute top-full mt-2 left-0 rounded-xl py-2 min-w-[140px] z-10"
+                    style={{
+                      backgroundColor: 'var(--color-bg-surface)',
+                      border: '1px solid var(--color-border)',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                    }}
+                  >
+                    {FIRE_BUTTON_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => {
+                          updateSettings({ gamepadFireButton: opt.value });
+                          setShowFireButtonPopup(false);
+                        }}
+                        className="w-full text-left px-5 py-2.5 text-sm transition-colors flex items-center justify-between"
+                        style={{
+                          color: gamepadFireButton === opt.value ? '#2563EB' : 'var(--color-text-secondary)',
+                          backgroundColor: gamepadFireButton === opt.value ? 'rgba(37, 99, 235, 0.15)' : 'transparent',
+                          fontWeight: gamepadFireButton === opt.value ? 700 : 500,
+                        }}
+                      >
+                        {opt.label}
+                        {gamepadFireButton === opt.value && (
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                            <path d="M3 7.5L5.5 10L11 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -240,7 +344,7 @@ export function Settings() {
                   <button
                     key={style}
                     style={crosshairStyle === style
-                      ? { border: '2px solid var(--tw-accent)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-700)', color: 'var(--tw-text-primary)', fontWeight: 700 }
+                      ? { border: '2px solid #2563EB', borderRadius: '12px', padding: '8px 16px', background: 'rgba(37, 99, 235, 0.15)', color: 'var(--tw-text-primary)', fontWeight: 700 }
                       : { border: '2px solid var(--tw-surface-600)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-800)', color: 'var(--tw-text-secondary)' }
                     }
                     onClick={() => updateSettings({ crosshairStyle: style })}
@@ -289,7 +393,7 @@ export function Settings() {
                   <button
                     key={q}
                     style={quality === q
-                      ? { border: '2px solid var(--tw-accent)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-700)', color: 'var(--tw-text-primary)', fontWeight: 700 }
+                      ? { border: '2px solid #2563EB', borderRadius: '12px', padding: '8px 16px', background: 'rgba(37, 99, 235, 0.15)', color: 'var(--tw-text-primary)', fontWeight: 700 }
                       : { border: '2px solid var(--tw-surface-600)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-800)', color: 'var(--tw-text-secondary)' }
                     }
                     onClick={() => updateSettings({ quality: q })}

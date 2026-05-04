@@ -1,4 +1,6 @@
 import * as BABYLON from '@babylonjs/core';
+import { getSceneClearColor } from '@/utils/themeColors';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
@@ -89,8 +91,8 @@ export class GameEngine {
     );
     directionalLight.intensity = 0.3;
 
-    // 环境
-    this.scene.clearColor = new BABYLON.Color4(0.06, 0.06, 0.08, 1);
+    // 环境 - 使用当前主题背景色
+    this.scene.clearColor = getSceneClearColor();
 
     // 优化：启用硬件缩放
     this.engine.setHardwareScalingLevel(1);
@@ -100,6 +102,7 @@ export class GameEngine {
 
   startRenderLoop(onRender?: () => void) {
     this.engine.runRenderLoop(() => {
+      this.updateCameraFromGamepad(this.engine.getDeltaTime());
       onRender?.();
       this.scene?.render();
     });
@@ -128,6 +131,43 @@ export class GameEngine {
 
   getIsPointerLocked(): boolean {
     return this.isPointerLocked;
+  }
+
+  updateCameraFromGamepad(deltaTime: number) {
+    if (!this.camera || deltaTime <= 0) return;
+
+    const settings = useSettingsStore.getState();
+    const deadzone = settings.gamepadDeadzone;
+    const sensitivity = settings.gamepadSensitivity;
+    const invertY = settings.gamepadInvertY ? -1 : 1;
+
+    const gamepads = navigator.getGamepads();
+    for (const gp of gamepads) {
+      if (!gp) continue;
+
+      const rx = gp.axes[2] || 0;
+      const ry = gp.axes[3] || 0;
+
+      const magnitude = Math.sqrt(rx * rx + ry * ry);
+      if (magnitude < deadzone) return;
+
+      const scale = (magnitude - deadzone) / (1 - deadzone);
+      const normalizedX = (rx / magnitude) * scale;
+      const normalizedY = (ry / magnitude) * scale;
+
+      const speed = sensitivity * 2.5 * (deltaTime / 1000);
+      this.camera.rotation.y += normalizedX * speed;
+      this.camera.rotation.x += normalizedY * speed * invertY;
+
+      this.camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.camera.rotation.x));
+      break;
+    }
+  }
+
+  updateClearColor(color: BABYLON.Color4) {
+    if (this.scene) {
+      this.scene.clearColor = color;
+    }
   }
 
   setQuality(level: 'low' | 'medium' | 'high' | 'ultra') {

@@ -1,6 +1,7 @@
 import * as BABYLON from '@babylonjs/core';
 import { BaseScene } from './BaseScene';
 import { GameEngine } from '../engine/GameEngine';
+import { getSceneWallColor, getSceneGridColor } from '@/utils/themeColors';
 
 interface GridshotConfig {
   targetCount: number;
@@ -60,8 +61,8 @@ export class GridshotScene extends BaseScene {
       this.lastTargetSpawnTime = now;
     }
 
-    // 检查训练时间
-    if (now - this.startTime > this.config.duration) {
+    // 检查训练时间（duration=0 表示不限时间）
+    if (this.config.duration > 0 && now - this.startTime > this.config.duration) {
       this.stop();
     }
   }
@@ -83,7 +84,7 @@ export class GridshotScene extends BaseScene {
 
   private createGridLines() {
     const { gridRows, gridCols } = this.config;
-    const gridColor = new BABYLON.Color3(0.15, 0.15, 0.25);
+    const gridColor = getSceneGridColor();
     const gridZ = 8; // 与目标位置一致
 
     // 垂直线
@@ -126,9 +127,9 @@ export class GridshotScene extends BaseScene {
     const backWall = BABYLON.MeshBuilder.CreatePlane('backWall', { width: 16, height: 10 }, this.scene);
     backWall.position = new BABYLON.Vector3(0, 6, 8.1);
 
-    // 墙壁材质 - 深色背景
+    // 墙壁材质 - 跟随主题
     const wallMat = new BABYLON.StandardMaterial('wallMat', this.scene);
-    wallMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.15);
+    wallMat.diffuseColor = getSceneWallColor();
     wallMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
 
     backWall.material = wallMat;
