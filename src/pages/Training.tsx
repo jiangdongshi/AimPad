@@ -251,6 +251,37 @@ export function Training() {
     return () => cancelAnimationFrame(animId);
   }, [status, selectedTask, countdown, startCountdown]);
 
+  // 手柄 Select/Start 按钮暂停训练
+  useEffect(() => {
+    if (status !== 'playing') return;
+
+    let prevSelectPressed = false;
+    let prevStartPressed = false;
+    let animId: number;
+
+    const poll = () => {
+      const gamepads = navigator.getGamepads();
+      for (const gp of gamepads) {
+        if (!gp) continue;
+        const selectIdx = getButtonIndex(gp, 'Select');
+        const startIdx = getButtonIndex(gp, 'Start');
+        const selectPressed = selectIdx !== undefined ? (gp.buttons[selectIdx]?.pressed ?? false) : false;
+        const startPressed = startIdx !== undefined ? (gp.buttons[startIdx]?.pressed ?? false) : false;
+
+        if ((selectPressed && !prevSelectPressed) || (startPressed && !prevStartPressed)) {
+          pauseTraining();
+        }
+        prevSelectPressed = selectPressed;
+        prevStartPressed = startPressed;
+        break;
+      }
+      animId = requestAnimationFrame(poll);
+    };
+
+    animId = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(animId);
+  }, [status, pauseTraining]);
+
   // 倒计时逻辑
   useEffect(() => {
     if (countdown === null || countdown <= 0) return;

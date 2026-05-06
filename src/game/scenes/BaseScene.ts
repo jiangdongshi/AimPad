@@ -149,7 +149,11 @@ export abstract class BaseScene {
   }
 
   protected removeTarget(mesh: BABYLON.Mesh) {
-    // 消失动画
+    // 立即从数组中移除，让生成逻辑能及时补充目标
+    this.targets = this.targets.filter(t => t !== mesh);
+    mesh.metadata.isTarget = false;
+
+    // 消失动画（mesh 仍在场景中播放动画，结束后清理）
     const animation = new BABYLON.Animation(
       'scaleDown',
       'scaling',
@@ -164,7 +168,6 @@ export abstract class BaseScene {
     mesh.animations.push(animation);
     this.scene.beginAnimation(mesh, 0, 10, false, 1, () => {
       mesh.dispose();
-      this.targets = this.targets.filter(t => t !== mesh);
     });
   }
 

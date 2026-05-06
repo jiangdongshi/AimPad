@@ -10,6 +10,16 @@ export class GameEngine {
   private camera: BABYLON.UniversalCamera | null = null;
   private isPointerLocked: boolean = false;
 
+  // 摄像机控制权热切换
+  private activeController: 'mouse' | 'gamepad' | null = null;
+  private lastMouseMoveTime: number = 0;
+  private lastGamepadMoveTime: number = 0;
+  private cameraControlEnabled: boolean = true;
+  private readonly CONTROLLER_IDLE_MS = 250;
+  private readonly MOUSE_THRESHOLD = 3;
+  private readonly MOUSE_TAKEOVER_THRESHOLD = 8;
+  private readonly GAMEPAD_ACTIVATION_THRESHOLD = 0.08;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.engine = new BABYLON.Engine(canvas, true, {
@@ -36,9 +46,22 @@ export class GameEngine {
       this.isPointerLocked = document.pointerLockElement === (this.canvas as unknown as Element);
     });
 
-    // 鼠标移动 - 控制摄像机视角
+    // 鼠标移动 - 控制摄像机视角（手柄活跃时需超过抢占阈值才能接管）
     document.addEventListener('mousemove', (e) => {
       if (!this.isPointerLocked || !this.camera) return;
+
+      const movementMag = Math.abs(e.movementX) + Math.abs(e.movementY);
+      const now = performance.now();
+
+      if (this.activeController === 'gamepad') {
+        const gamepadIdle = now - this.lastGamepadMoveTime > this.CONTROLLER_IDLE_MS;
+        if (!gamepadIdle && movementMag < this.MOUSE_TAKEOVER_THRESHOLD) return;
+      }
+
+      if (movementMag < this.MOUSE_THRESHOLD) return;
+
+      this.activeController = 'mouse';
+      this.lastMouseMoveTime = now;
 
       const sensitivity = 0.002;
       this.camera.rotation.y += e.movementX * sensitivity;
@@ -133,11 +156,27 @@ export class GameEngine {
     return this.isPointerLocked;
   }
 
+  setCameraControlEnabled(enabled: boolean) {
+    this.cameraControlEnabled = enabled;
+    if (!enabled) {
+      this.activeController = null;
+    }
+  }
+
   updateCameraFromGamepad(deltaTime: number) {
-    if (!this.camera || deltaTime <= 0) return;
+    if (!this.camera || deltaTime <= 0 || !this.cameraControlEnabled) return;
+
+    const now = performance.now();
+
+    // 当前活跃控制器闲置超时后释放控制权
+    if (this.activeController === 'mouse' && now - this.lastMouseMoveTime > this.CONTROLLER_IDLE_MS) {
+      this.activeController = null;
+    }
+    if (this.activeController === 'gamepad' && now - this.lastGamepadMoveTime > this.CONTROLLER_IDLE_MS) {
+      this.activeController = null;
+    }
 
     const settings = useSettingsStore.getState();
-    const deadzone = settings.gamepadDeadzone;
     const sensitivity = settings.gamepadSensitivity;
     const invertY = settings.gamepadInvertY ? -1 : 1;
 
@@ -147,17 +186,23 @@ export class GameEngine {
 
       const rx = gp.axes[2] || 0;
       const ry = gp.axes[3] || 0;
+      const magnitude = Math.sqrt(rx ** 2 + ry ** 2);
 
-      const magnitude = Math.sqrt(rx * rx + ry * ry);
-      if (magnitude < deadzone) return;
+      // 接管门槛：摇杆需超过激活阈值才能夺取控制权，过滤漂移
+      if (this.activeController !== 'gamepad') {
+        if (magnitude < this.GAMEPAD_ACTIVATION_THRESHOLD) return;
+        if (this.activeController === 'mouse') {
+          const mouseIdle = now - this.lastMouseMoveTime > this.CONTROLLER_IDLE_MS;
+          if (!mouseIdle) return;
+        }
+      }
 
-      const scale = (magnitude - deadzone) / (1 - deadzone);
-      const normalizedX = (rx / magnitude) * scale;
-      const normalizedY = (ry / magnitude) * scale;
+      this.activeController = 'gamepad';
+      this.lastGamepadMoveTime = now;
 
       const speed = sensitivity * 2.5 * (deltaTime / 1000);
-      this.camera.rotation.y += normalizedX * speed;
-      this.camera.rotation.x += normalizedY * speed * invertY;
+      this.camera.rotation.y += rx * speed;
+      this.camera.rotation.x += ry * speed * invertY;
 
       this.camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.camera.rotation.x));
       break;

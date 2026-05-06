@@ -54,11 +54,9 @@ export class GridshotScene extends BaseScene {
     // 检查过期目标（困难/地狱模式）
     this.checkExpiredTargets();
 
-    // 检查是否需要生成新目标
-    if (this.targets.length < this.config.targetCount &&
-        now - this.lastTargetSpawnTime > this.config.spawnInterval) {
+    // 实时保持场上小球数量等于 targetCount，一旦不足立即补足
+    while (this.targets.length < this.config.targetCount) {
       this.spawnRandomTarget();
-      this.lastTargetSpawnTime = now;
     }
 
     // 检查训练时间（duration=0 表示不限时间）
