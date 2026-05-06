@@ -195,6 +195,7 @@ export function useTraining() {
 
       engineRef.current?.startRenderLoop();
       animFrameRef.current = requestAnimationFrame(renderLoop);
+      engineRef.current?.setCameraControlEnabled(true);
       setStatus('playing');
     } catch (error) {
       console.error('Failed to start training:', error);
@@ -233,6 +234,7 @@ export function useTraining() {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = 0;
       }
+      engineRef.current?.setCameraControlEnabled(false);
       setStatus('paused');
     }
   }, [status]);
@@ -286,6 +288,7 @@ export function useTraining() {
       };
 
       animFrameRef.current = requestAnimationFrame(renderLoop);
+      engineRef.current?.setCameraControlEnabled(true);
       setStatus('playing');
     }
   }, [status, currentTask, handleTrainingEnd, updateScore, setFps, taskDurations]);
@@ -340,6 +343,7 @@ export function useTraining() {
     }
 
     sceneRef.current?.dispose();
+    engineRef.current?.setCameraControlEnabled(false);
     engineRef.current?.dispose();
     sceneRef.current = null;
     engineRef.current = null;
