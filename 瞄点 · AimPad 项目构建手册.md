@@ -17,8 +17,14 @@
 - [8. 开发工作流](#8-开发工作流)
 - [9. 构建与部署](#9-构建与部署)
 - [10. 常见问题与解决方案](#10-常见问题与解决方案)
+- [11. 已实现功能总览](#11-已实现功能总览)
+- [12. 自定义训练任务系统](#12-自定义训练任务系统)
 - [附录 A：技术选型总览](#附录-a技术选型总览)
 - [附录 B：开发里程碑](#附录-b开发里程碑)
+- [附录 C：已完成模块详细清单](#附录-c已完成模块详细清单)
+- [附录 D：技术架构图](#附录-d技术架构图)
+- [附录 E：环境变量配置](#附录-e环境变量配置)
+- [附录 F：快速启动指南](#附录-f快速启动指南)
 
 ---
 
@@ -1671,14 +1677,18 @@ scene.postProcessesEnabled = false; // 关闭后处理
 | **6 个训练任务** | Gridshot（静态点射）、Spidershot（蜘蛛射击）、SphereTrack（球体跟踪）、StrafeTrack（移动跟踪）、TargetSwitch（目标切换）、ReflexShot（反应射击） |
 | **5 级游戏难度** | 容易（1.5x）、简单（1.0x）、普通（0.7x）、困难（0.5x + 2s 消失）、地狱（0.3x + 1.2s 消失） |
 | **每个任务独立难度** | 各任务难度独立存储于 `localStorage`（key: `aimpad_task_difficulties`），默认为"困难"，切换任务自动加载对应难度 |
+| **训练时长选择** | 支持 30s/45s/60s/无限制四种时长选项，每个任务独立存储（key: `aimpad_task_durations`） |
+| **小球颜色自定义** | 8 种预设颜色（淡蓝、红、绿、黄、紫、白、橙、粉），存储于 `localStorage`（key: `aimpad_ball_color`） |
 | **3 秒倒计时** | 开始训练前显示大号倒计时数字 |
 | **Pointer Lock** | 训练时锁定鼠标指针，解锁自动暂停 |
 | **ESC 暂停** | 支持在等待、倒计时、游戏中三阶段按 ESC 暂停 |
-| **暂停菜单** | 暂停时显示难度选择器（选中蓝色高亮 + 缩放 + 下划线）+ 退出/重新开始/继续按钮 |
+| **暂停菜单** | 暂停时显示难度选择器、时长选择器、颜色选择器 + 退出/重新开始/继续按钮 |
 | **难度切换自动重置** | 暂停时切换难度，点击继续会回到"点击开始训练"阶段（而非直接恢复） |
 | **目标过期机制** | 困难/地狱难度下，目标在指定时间未被击中会消失并计入脱靶（BaseScene.checkExpiredTargets） |
 | **Canvas 清除** | 重新开始训练时用 `gl.clear()` + `gl.finish()` 清除 WebGL 画布残影 |
 | **WebGL 场景销毁** | 训练结束/重置时正确销毁 Babylon.js 引擎和场景，防止内存泄漏 |
+| **手柄开火支持** | 训练中可通过手柄开火按钮（默认 RT）射击目标，支持配置 |
+| **手柄暂停支持** | 训练中按 Select/Start 按钮可暂停训练 |
 
 **难度配置详情（GAME_DIFFICULTY_CONFIG）**：
 
@@ -1714,6 +1724,9 @@ scene.postProcessesEnabled = false; // 关闭后处理
 | **输入平滑** | 移动平均缓冲区（默认 3 帧）减少摇杆抖动 |
 | **统一输入管理器** | 鼠标/手柄自动切换，边沿检测（shootPressed） |
 | **自定义鼠标处理** | 清除默认输入，使用 Pointer Lock API 的 movementX/Y |
+| **手柄可视化页面** | `/gamepad` 页面实时显示手柄连接状态、摇杆位置、按钮按下状态 |
+| **手柄开火按钮配置** | 设置中可配置手柄开火按钮（默认 RT），训练中自动应用 |
+| **手柄暂停按钮** | 训练中按 Select/Start 按钮可暂停训练 |
 
 ### 11.4 HUD 与准星
 
@@ -1758,7 +1771,7 @@ scene.postProcessesEnabled = false; // 关闭后处理
 
 | 功能 | 说明 |
 |------|------|
-| **手柄设置** | 死区（0-0.5）、灵敏度（0.1-3）、Y 轴反转 |
+| **手柄设置** | 死区（0-0.5）、灵敏度（0.1-3）、Y 轴反转、开火按钮（A/B/X/Y/LB/RB/LT/RT） |
 | **鼠标设置** | 灵敏度（0.1-5）、Y 轴反转 |
 | **准星设置** | 样式、颜色、大小 |
 | **显示设置** | 画质档位（low/medium/high/ultra） |
@@ -1799,6 +1812,7 @@ scene.postProcessesEnabled = false; // 关闭后处理
 | 训练页 | `/training` | 任务选择网格；`?task=xxx` 时进入 3D 画布训练 |
 | 统计页 | `/statistics` | 数据面板、趋势图表、任务统计表 |
 | 设置页 | `/settings` | 主题、手柄、鼠标、准星、显示、音效设置 |
+| 手柄页 | `/gamepad` | 手柄连接状态、摇杆可视化、按钮状态实时显示 |
 | 登录页 | `/login` | 邮箱验证码登录 |
 | 注册页 | `/register` | 用户注册 |
 | 找回密码 | `/forgot-password` | 密码重置 |
@@ -1854,22 +1868,25 @@ scene.postProcessesEnabled = false; // 关闭后处理
 - [x] 数据统计仪表板（Statistics 页面）
 - [x] 用户系统与云端存储（邮箱验证码认证 + JWT）
 - [x] 准星自定义功能（样式、颜色、大小）
-- [x] 手柄灵敏度曲线配置（死区、灵敏度、Y轴反转）
+- [x] 手柄灵敏度曲线配置（死区、灵敏度、Y轴反转、开火按钮配置）
 - [x] 8 套主题切换（深黑、午夜蓝、森林绿、皇家紫、中国红、纯白、暖奶油、冷灰）
 - [x] 多语言支持（中文/英文，约 170 个翻译键）
 - [x] 5 级游戏难度系统（容易/简单/普通/困难/地狱，每个任务独立存储）
-- [x] 暂停/恢复系统（ESC 暂停、Pointer Lock 集成、难度选择）
+- [x] 训练时长选择（30s/45s/60s/无限制，每个任务独立存储）
+- [x] 小球颜色自定义（8 种预设颜色）
+- [x] 暂停/恢复系统（ESC 暂停、Pointer Lock 集成、难度/时长/颜色选择）
 - [x] 目标过期机制（困难 2s、地狱 1.2s 未击中自动消失并计入脱靶）
 - [x] 设置云端同步（保存到云端 / 从云端加载）
 - [x] 主题感知 UI（所有组件通过 CSS 变量跟随主题）
 - [x] 导航栏条件隐藏（训练中自动隐藏，任务选择时显示）
-- [ ] 自定义任务系统
+- [x] 手柄可视化页面（连接状态、摇杆、按钮实时显示）
+- [x] 手柄训练支持（开火、暂停按钮）
 
-### Phase 3：社交与进阶 ⏳ 待开始
+### Phase 3：社交与进阶 ⏳ 规划中
 
 - [ ] 排行榜系统
 - [ ] 好友功能与成绩对比
-- [ ] 任务分享功能
+- [x] 自定义训练任务系统（配置驱动 + 16位分享码）
 - [ ] 成就系统
 
 ### Phase 4：优化与扩展 ⏳ 待开始
@@ -1954,9 +1971,10 @@ scene.postProcessesEnabled = false; // 关闭后处理
 | 页面 | 文件路径 | 状态 | 说明 |
 |------|----------|------|------|
 | 首页 | `src/pages/Home.tsx` | ✅ | 项目介绍、功能卡片、热门任务、使用指南 |
-| 训练页 | `src/pages/Training.tsx` | ✅ | 任务选择网格、3D 画布、倒计时、暂停菜单（含难度选择）、结果面板 |
+| 训练页 | `src/pages/Training.tsx` | ✅ | 任务选择网格、3D 画布、倒计时、暂停菜单（含难度/时长/颜色选择）、结果面板 |
 | 统计页 | `src/pages/Statistics.tsx` | ✅ | 任务筛选、汇总卡片、性能指标、分数图表、任务统计表 |
 | 设置页 | `src/pages/Settings.tsx` | ✅ | 主题（8 个）、手柄、鼠标、准星、显示、音效设置，云端同步 |
+| 手柄页 | `src/pages/Gamepad.tsx` | ✅ | 手柄连接状态、设备信息、摇杆可视化、按钮状态实时显示（仿手柄布局） |
 | 登录页 | `src/pages/Login.tsx` | ✅ | 邮箱验证码登录、60 秒冷却、演示模式 |
 | 注册页 | `src/pages/Register.tsx` | ✅ | 邮箱 + 用户名 + 验证码注册，注册后自动同步设置 |
 | 找回密码 | `src/pages/ForgotPassword.tsx` | ✅ | 邮箱 + 验证码 + 新密码重置 |
@@ -2017,6 +2035,275 @@ scene.postProcessesEnabled = false; // 关闭后处理
 | 设计令牌 | `src/styles/tokens.css` | ✅ | CSS 自定义属性（颜色、间距、圆角、字体、阴影） |
 | 主题系统 | `src/styles/themes.css` | ✅ | 8 套完整主题的 CSS 变量定义（含 RGB 变体） |
 | 全局样式 | `src/styles/global.css` | ✅ | 自定义滚动条、选中色、字体覆盖、关键帧动画（pulse-glow/slide-up/fade-in/float） |
+
+---
+
+## 12. 自定义训练任务系统
+
+### 12.1 设计目标
+
+将训练任务从硬编码模式改为**配置驱动模式**，实现：
+- 通过参数配置创建新的训练任务，无需编写代码
+- 通过 16 位分享码分享任务配置
+- 导入分享码即可创建相同的训练任务
+
+### 12.2 现有架构问题
+
+现有架构是**硬编码类继承**模式：
+
+```
+BaseScene (抽象基类)
+├── GridshotScene (网格点射)
+└── SphereTrackScene (球体跟踪)
+```
+
+每新增一种训练类型需要新建一个 class，扩展成本高。
+
+### 12.3 目标架构：配置驱动
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SceneConfig (配置层)                      │
+├─────────────────────────────────────────────────────────────┤
+│  type: 'grid' | 'tracking' | 'reaction' | 'switching'       │
+│  name: string                                               │
+│  description: string                                         │
+│  target: { count, size, color, shape, glow }                │
+│  movement: { type, speed, pattern, bounds }                 │
+│  spawn: { interval, stagger, lifetime }                     │
+│  scoring: { accuracy, speed, consistency weights }          │
+│  display: { gridRows, gridCols, showGuide, guideColor }     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              UniversalSceneFactory (工厂)                   │
+│  根据配置自动创建对应的场景对象，无需新增 class              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 12.4 SceneConfig 类型设计
+
+```typescript
+// src/types/customTask.ts
+
+export type MovementType = 'static' | 'linear' | 'circular' | 'sine' | 'random' | 'figure8';
+export type TargetShape = 'sphere' | 'cube' | 'cylinder' | 'flat';
+export type SpawnMode = 'interval' | 'continuous' | 'burst';
+
+export interface TargetConfig {
+  shape: TargetShape;
+  size: number;           // 0.3 ~ 2.0
+  color: string;           // hex color
+  glowIntensity: number;  // 0 ~ 1
+  emissive: boolean;       // 是否自发光
+}
+
+export interface MovementConfig {
+  type: MovementType;
+  speed: number;          // 1 ~ 10
+  pattern?: {             // 特定模式的额外参数
+    amplitude?: number;  // 运动幅度
+    frequency?: number;   // 运动频率
+    phase?: number;       // 初始相位
+  };
+  bounds?: {               // 运动边界
+    xMin: number; xMax: number;
+    yMin: number; yMax: number;
+  };
+}
+
+export interface SpawnConfig {
+  mode: SpawnMode;
+  interval: number;       // ms (interval 模式)
+  maxActive: number;       // 最大同时存在目标数
+  lifetime: number;       // ms, 0 = 无限
+  staggerDelay: number;   // burst 模式下的间隔
+}
+
+export interface GridDisplayConfig {
+  rows: number;            // 1 ~ 10
+  cols: number;            // 1 ~ 20
+  showLines: boolean;
+  lineColor: string;
+  wallColor: string;
+  wallHeight: number;      // 目标墙高度
+}
+
+export interface SceneConfig {
+  id?: string;             // 分享码解码时自动生成
+  name: string;            // 任务名称 (1-32 字符)
+  description: string;     // 任务描述 (0-200 字符)
+
+  // 目标配置
+  target: TargetConfig;
+
+  // 运动配置
+  movement: MovementConfig;
+
+  // 生成配置
+  spawn: SpawnConfig;
+
+  // 网格显示配置 (仅 grid 类型需要)
+  display?: GridDisplayConfig;
+
+  // 计分配置
+  scoring: {
+    weightAccuracy: number;     // 0 ~ 1
+    weightSpeed: number;        // 0 ~ 1
+    weightConsistency: number;  // 0 ~ 1
+  };
+
+  // 预设难度映射 (允许用户创建后调整)
+  difficultyPresets?: {
+    easy: { targetSizeMult: number; speedMult: number; lifetime: number; };
+    normal: { targetSizeMult: number; speedMult: number; lifetime: number; };
+    hard: { targetSizeMult: number; speedMult: number; lifetime: number; };
+  };
+}
+```
+
+### 12.5 分享码设计
+
+分享码采用 **Base64URL 编码 + CRC16 校验**，生成长度约 16 字符的字符串。
+
+```typescript
+// 分享码格式
+ShareCode = Base64URL(JSON.stringify(config)).slice(0, 20) + CRC16(Base64URL)
+
+interface ShareCodePayload {
+  v: 1;                    // 版本号，便于未来兼容
+  c: SceneConfig;          // 场景配置
+  h: string;               // CRC16 校验码 (4字符)
+}
+```
+
+**编码流程**：
+
+1. `JSON.stringify(config)` → string
+2. `base64url encode` → string
+3. 取前 20 字符 + CRC16 校验码(4字符) → 总共 24 字符
+4. 为了便于阅读，可截取前 16 字符显示
+
+**解码流程**：
+
+1. 提取后 4 字符作为 CRC 校验码
+2. 校验前 20 字符的 CRC 是否匹配
+3. Base64URL 解码
+4. `JSON.parse()` 还原配置
+5. 验证配置合法性
+
+**CRC16 实现**：
+
+```typescript
+function crc16(str: string): string {
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+    }
+  }
+  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+}
+```
+
+**分享码示例**：
+
+```
+GRID5X3T8S800N4C  (16字符，纯字母数字)
+```
+
+前 12 字符为配置编码，后 4 字符为 CRC16 校验码。
+
+### 12.6 核心代码结构
+
+**SceneFactory.ts**：
+
+```typescript
+// src/game/scenes/SceneFactory.ts
+export class SceneFactory {
+  static createScene(engine: GameEngine, config: SceneConfig): BaseScene {
+    const movementType = config.movement.type;
+
+    switch (movementType) {
+      case 'static':
+        return new GridScene(engine, config);      // 静态/网格场景
+      case 'circular':
+      case 'sine':
+      case 'figure8':
+        return new TrackingScene(engine, config); // 跟踪场景
+      case 'random':
+        return new ReactionScene(engine, config); // 反应场景
+      case 'linear':
+        return new LinearScene(engine, config);    // 线性移动场景
+      default:
+        throw new Error(`Unknown movement type: ${movementType}`);
+    }
+  }
+}
+```
+
+**UniversalScene.ts**（通用场景类）：
+
+```typescript
+// src/game/scenes/UniversalScene.ts
+export class UniversalScene extends BaseScene {
+  private config: SceneConfig;
+
+  constructor(engine: GameEngine, config: SceneConfig) {
+    super(engine, config.id || `custom-${Date.now()}`);
+    this.config = config;
+  }
+
+  async setup() {
+    this.createGround(20, 20);
+    if (this.config.display?.showLines) {
+      this.createGridLines();
+    }
+    // 根据 movement.type 创建对应的目标行为
+  }
+
+  update(deltaTime: number) {
+    if (!this.isActive) return;
+    // 根据 config.movement.type 更新目标位置
+    // 根据 config.spawn 管理目标生成
+    this.checkExpiredTargets();
+  }
+}
+```
+
+### 12.7 路由变更
+
+```typescript
+// App.tsx 新增路由
+<Route path="/custom-task" element={<CustomTaskEditor />} />
+<Route path="/custom-task/:taskId" element={<CustomTaskEditor />} />
+<Route path="/import" element={<ImportShareCode />} />
+```
+
+### 12.8 数据持久化
+
+```typescript
+// localStorage 结构
+interface CustomTasksStorage {
+  customTasks: (SceneConfig & { id: string; createdAt: number; updatedAt: number })[];
+  favoriteIds: string[];
+}
+
+// 存储 key
+const CUSTOM_TASKS_KEY = 'aimpad_custom_tasks';
+```
+
+### 12.9 预估工作量
+
+| Phase | 内容 | 预估时间 |
+|-------|------|---------|
+| Phase 1 | 配置标准化 + UniversalScene | 2-3 天 |
+| Phase 2 | 编辑器 UI | 2-3 天 |
+| Phase 3 | 分享码导入/导出 | 1 天 |
+| 测试 | 边界情况测试 | 1 天 |
+| **合计** | | **5-8 天** |
 
 ---
 
@@ -2149,7 +2436,7 @@ docker compose down
 
 ---
 
-**文档版本**：v3.0
-**最后更新**：2026-05-02
+**文档版本**：v3.1
+**最后更新**：2026-05-06
 **维护者**：@jiangdongshi
 **项目仓库**：https://github.com/jiangdongshi/AimPad

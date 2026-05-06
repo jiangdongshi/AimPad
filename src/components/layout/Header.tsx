@@ -14,6 +14,7 @@ export function Header() {
     { path: '/', label: locale['nav.home'] },
     { path: '/gamepad', label: locale['nav.gamepad'] },
     { path: '/training', label: locale['nav.training'] },
+    { path: '/custom-task', label: locale['nav.customTask'] || 'Custom' },
     { path: '/statistics', label: locale['nav.statistics'] },
     { path: '/settings', label: locale['nav.settings'] },
   ];
