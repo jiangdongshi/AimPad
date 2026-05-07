@@ -342,7 +342,7 @@ ON DUPLICATE KEY UPDATE
 
 ### 4.5 训练任务配置表 `training_tasks`
 
-可选表。当前 6 个预设任务硬编码在 `src/types/training.ts` 中。如果未来需要支持用户自定义任务或运营配置任务，可使用此表。
+系统预设任务表。当前 6 个预设任务定义在此表中，可通过运营配置调整。
 
 ```sql
 CREATE TABLE `training_tasks` (
@@ -374,6 +374,86 @@ INSERT INTO `training_tasks` (`id`, `name`, `name_zh`, `type`, `description`, `d
 ('target-switch', 'TargetSwitch',  '目标切换',  'target-switching',   '在多个目标间快速切换，训练目标切换能力',            'intermediate',  30000, '{"targetCount":5,"targetSize":0.7,"targetSpeed":0,"spawnInterval":500,"minDistance":5,"maxDistance":12}', '{"weightAccuracy":0.3,"weightSpeed":0.5,"weightConsistency":0.2}'),
 ('reflex-shot',   'ReflexShot',    '反射射击',  'reaction',           '目标随机出现并快速消失，训练反应速度',              'advanced',      30000, '{"targetCount":1,"targetSize":0.5,"targetSpeed":0,"spawnInterval":2000,"minDistance":5,"maxDistance":15}', '{"weightAccuracy":0.3,"weightSpeed":0.6,"weightConsistency":0.1}');
 ```
+
+### 4.6 自定义任务配置表 `custom_tasks`
+
+用户自定义训练任务配置表，支持分享码导入导出。
+
+```sql
+CREATE TABLE `custom_tasks` (
+  `id`              VARCHAR(32)      NOT NULL COMMENT '任务 ID (自定义格式: custom-xxxxx)',
+  `user_id`         BIGINT UNSIGNED  DEFAULT NULL COMMENT '创建者用户 ID (NULL=系统预设)',
+  `share_code`      VARCHAR(16)      NOT NULL COMMENT '16位分享码 (唯一索引)',
+  `name`            VARCHAR(64)      NOT NULL COMMENT '任务名称',
+  `name_zh`         VARCHAR(64)      DEFAULT NULL COMMENT '任务中文名',
+  `type`            VARCHAR(32)      NOT NULL COMMENT '任务类型',
+  `description`     VARCHAR(256)     DEFAULT NULL COMMENT '任务描述',
+  `difficulty`      VARCHAR(16)      NOT NULL DEFAULT 'beginner' COMMENT '推荐难度',
+  `config`          JSON             NOT NULL COMMENT '完整场景配置 (SceneConfig)',
+  `play_count`      INT UNSIGNED     NOT NULL DEFAULT 0 COMMENT '被游玩次数',
+  `is_public`       TINYINT(1)       NOT NULL DEFAULT 0 COMMENT '是否公开 (0=私有,1=公开)',
+  `created_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_share_code` (`share_code`),
+  INDEX `idx_user` (`user_id`),
+  INDEX `idx_public` (`is_public`, `play_count` DESC),
+  CONSTRAINT `fk_custom_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='自定义训练任务配置表';
+```
+
+**config 字段结构 (JSON)**：
+
+```json
+{
+  "target": {
+    "shape": "sphere",
+    "size": 0.8,
+    "color": "#FF3333",
+    "glowIntensity": 0.5,
+    "emissive": true
+  },
+  "movement": {
+    "type": "static",
+    "speed": 0,
+    "bounds": { "xMin": -5, "xMax": 5, "yMin": 3, "yMax": 8 }
+  },
+  "spawn": {
+    "mode": "interval",
+    "interval": 800,
+    "maxActive": 3,
+    "lifetime": 0
+  },
+  "display": {
+    "rows": 3,
+    "cols": 5,
+    "showLines": true,
+    "lineColor": "#333344",
+    "wallColor": "#1a1a2e",
+    "wallHeight": 10
+  },
+  "scoring": {
+    "weightAccuracy": 0.4,
+    "weightSpeed": 0.4,
+    "weightConsistency": 0.2
+  },
+  "difficultyPresets": {
+    "easy": { "targetSizeMult": 1.5, "speedMult": 1.0, "lifetime": 0 },
+    "normal": { "targetSizeMult": 1.0, "speedMult": 1.0, "lifetime": 0 },
+    "hard": { "targetSizeMult": 0.5, "speedMult": 1.0, "lifetime": 2000 }
+  }
+}
+```
+
+**share_code 生成规则**：
+
+```
+share_code = Base64URL(CRC16(Config) + Config[0:12])
+```
+
+- 取配置 JSON 的前 12 个 Base64URL 字符
+- 拼接 4 位 CRC16 校验码
+- 总共 16 个字母数字字符
 
 ---
 
@@ -429,6 +509,18 @@ INSERT INTO `training_tasks` (`id`, `name`, `name_zh`, `type`, `description`, `d
 │ total_accuracy│
 │ total_reaction│
 └──────────────┘
+
+┌─────────────────────────┐
+│     custom_tasks         │
+│─────────────────────────│
+│ PK id                   │
+│ FK user_id (可空)        │◄── 用户创建的自定义任务
+│ UK share_code           │
+│ name                    │
+│ config (JSON)           │
+│ play_count              │
+│ is_public               │
+└─────────────────────────┘
 ```
 
 **关系说明：**
@@ -718,7 +810,31 @@ CREATE TABLE `daily_stats` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='每日统计快照表';
 
 -- --------------------------------------------
--- 6. 插入预设训练任务数据
+-- 6. 自定义任务配置表
+-- --------------------------------------------
+CREATE TABLE `custom_tasks` (
+  `id`              VARCHAR(32)      NOT NULL COMMENT '任务 ID',
+  `user_id`         BIGINT UNSIGNED  DEFAULT NULL COMMENT '创建者用户 ID',
+  `share_code`      VARCHAR(16)      NOT NULL COMMENT '分享码',
+  `name`            VARCHAR(64)      NOT NULL COMMENT '任务名称',
+  `name_zh`         VARCHAR(64)      DEFAULT NULL COMMENT '任务中文名',
+  `type`            VARCHAR(32)      NOT NULL COMMENT '任务类型',
+  `description`     VARCHAR(256)     DEFAULT NULL COMMENT '任务描述',
+  `difficulty`      VARCHAR(16)      NOT NULL DEFAULT 'beginner' COMMENT '推荐难度',
+  `config`          JSON             NOT NULL COMMENT '完整场景配置',
+  `play_count`      INT UNSIGNED     NOT NULL DEFAULT 0 COMMENT '被游玩次数',
+  `is_public`       TINYINT(1)       NOT NULL DEFAULT 0 COMMENT '是否公开',
+  `created_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_share_code` (`share_code`),
+  INDEX `idx_user` (`user_id`),
+  INDEX `idx_public` (`is_public`, `play_count` DESC),
+  CONSTRAINT `fk_custom_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='自定义训练任务配置表';
+
+-- --------------------------------------------
+-- 7. 插入预设训练任务数据
 -- --------------------------------------------
 INSERT INTO `training_tasks` (`id`, `name`, `name_zh`, `type`, `description`, `difficulty`, `duration`, `parameters`, `scoring`) VALUES
 ('gridshot',      'Gridshot',      '网格射击',  'static-clicking',    '快速点击网格中的固定目标，训练基础定位能力',        'beginner',      30000, '{"targetCount":3,"targetSize":0.8,"targetSpeed":0,"spawnInterval":800,"minDistance":5,"maxDistance":10}',  '{"weightAccuracy":0.4,"weightSpeed":0.4,"weightConsistency":0.2}'),
@@ -904,6 +1020,19 @@ useSettingsStore.setState({
 | `GET` | `/api/tasks` | 获取所有启用的训练任务 |
 | `GET` | `/api/tasks/:id` | 获取单个任务详情 |
 
+### 10.7 自定义任务接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/custom-tasks` | 创建自定义任务 |
+| `GET` | `/api/custom-tasks` | 获取当前用户的自定义任务列表 |
+| `GET` | `/api/custom-tasks/:id` | 获取自定义任务详情 |
+| `PUT` | `/api/custom-tasks/:id` | 更新自定义任务 |
+| `DELETE` | `/api/custom-tasks/:id` | 删除自定义任务 |
+| `GET` | `/api/custom-tasks/by-code/:shareCode` | 通过分享码获取任务（无需登录） |
+| `POST` | `/api/custom-tasks/import` | 导入分享码创建任务 |
+| `GET` | `/api/custom-tasks/public` | 获取公开任务列表（可按 play_count 排序） |
+
 ---
 
 ## 11. 安全与性能
@@ -950,6 +1079,17 @@ useSettingsStore.setState({
 | `strafe-track` | StrafeTrack | 移动追踪 | tracking |
 | `target-switch` | TargetSwitch | 目标切换 | target-switching |
 | `reflex-shot` | ReflexShot | 反射射击 | reaction |
+| `custom-*` | Custom Task | 自定义任务 | 用户创建 |
+
+### custom_task type 枚举值
+
+| type | 说明 |
+|------|------|
+| `static-clicking` | 静态点射 |
+| `dynamic-clicking` | 动态点射 |
+| `tracking` | 跟踪训练 |
+| `target-switching` | 目标切换 |
+| `reaction` | 反应训练 |
 
 ### difficulty 枚举值
 
@@ -1002,6 +1142,6 @@ useSettingsStore.setState({
 
 ---
 
-**文档版本**：v1.0
-**最后更新**：2026-05-01
+**文档版本**：v1.1
+**最后更新**：2026-05-06
 **维护者**：@jiangdongshi

@@ -9,6 +9,9 @@ import { trainingStorage } from '@/utils/storage';
 import { useGameStore } from '@/stores/gameStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { getSceneBackgroundRgb, getSceneClearColor } from '@/utils/themeColors';
+import type { CustomTask } from '@/types/customTask';
+import { CustomScene } from '@/game/scenes/CustomScene';
+import { useCustomTaskStore } from '@/stores/customTaskStore';
 
 type TrainingStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'completed';
 
@@ -45,6 +48,7 @@ function loadTaskDurations(): Record<string, TaskDuration> {
 export function useTraining() {
   const [status, setStatus] = useState<TrainingStatus>('idle');
   const [currentTask, setCurrentTask] = useState<TrainingTaskConfig | null>(null);
+  const [currentCustomTask, setCurrentCustomTask] = useState<CustomTask | null>(null);
   const [result, setResult] = useState<TrainingResult | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [taskDifficulties, setTaskDifficulties] = useState<Record<string, GameDifficulty>>(loadTaskDifficulties);
@@ -63,6 +67,7 @@ export function useTraining() {
   const pauseTimeRef = useRef<number>(0); // 暂停时的时间点
   const elapsedBeforePauseRef = useRef<number>(0); // 暂停前已用时间
   const currentTaskRef = useRef<TrainingTaskConfig | null>(null); // 用 ref 存储 currentTask
+  const currentCustomTaskRef = useRef<CustomTask | null>(null); // 用 ref 存储 currentCustomTask
 
   // 获取 gameStore 的更新方法
   const updateScore = useGameStore((s) => s.updateScore);
@@ -297,6 +302,86 @@ export function useTraining() {
     handleTrainingEnd();
   }, [handleTrainingEnd]);
 
+  // 启动自定义任务训练
+  const startCustomTraining = useCallback(async (task: CustomTask, canvas: HTMLCanvasElement) => {
+    setStatus('loading');
+    setCurrentCustomTask(task);
+    currentCustomTaskRef.current = task;
+    setCurrentTask(null);
+    currentTaskRef.current = null;
+    setResult(null);
+    elapsedBeforePauseRef.current = 0;
+
+    try {
+      const engine = new GameEngine(canvas);
+      engineRef.current = engine;
+
+      // 应用难度配置
+      const difficulty = 'hard';
+      const diffConfig = GAME_DIFFICULTY_CONFIG[difficulty];
+
+      const scene = new CustomScene(engine, task, task.id);
+      sceneRef.current = scene;
+
+      // 应用难度和颜色
+      scene.setDifficulty(diffConfig.targetSizeMultiplier, diffConfig.targetLifetime);
+      scene.setTargetColor(ballColor);
+      scene.setFireButton(useSettingsStore.getState().gamepadFireButton);
+
+      await scene.setup();
+      scene.start();
+
+      // 启动渲染循环
+      const startTime = performance.now();
+      let lastTime = startTime;
+      let fpsUpdateCounter = 0;
+
+      const renderLoop = () => {
+        const now = performance.now();
+        const deltaTime = now - lastTime;
+        lastTime = now;
+
+        scene.update(deltaTime);
+        scene.checkGamepadFire();
+
+        const stats = scene.getStats();
+        updateScore(stats.hits, stats.misses);
+
+        fpsUpdateCounter++;
+        if (fpsUpdateCounter >= 10) {
+          const eng = engineRef.current;
+          if (eng) {
+            setFps(Math.round(eng.getFps()));
+          }
+          fpsUpdateCounter = 0;
+        }
+
+        // 更新剩余时间
+        const duration = task.duration || 0;
+        const elapsed = now - startTime + elapsedBeforePauseRef.current;
+        const remaining = duration > 0 ? Math.max(0, duration - elapsed) : -1;
+        setTimeRemaining(duration > 0 ? Math.ceil(remaining / 1000) : -1);
+
+        if (duration <= 0 || remaining > 0) {
+          animFrameRef.current = requestAnimationFrame(renderLoop);
+        } else {
+          handleTrainingEnd();
+        }
+      };
+
+      engineRef.current?.startRenderLoop();
+      animFrameRef.current = requestAnimationFrame(renderLoop);
+      engineRef.current?.setCameraControlEnabled(true);
+      setStatus('playing');
+
+      // 更新游玩次数
+      useCustomTaskStore.getState().incrementPlayCount(task.id);
+    } catch (error) {
+      console.error('Failed to start custom training:', error);
+      setStatus('idle');
+    }
+  }, [ballColor, updateScore, setFps, handleTrainingEnd]);
+
   const setGameDifficulty = useCallback((taskId: string, difficulty: GameDifficulty) => {
     setTaskDifficulties((prev) => {
       const next = { ...prev, [taskId]: difficulty };
@@ -351,6 +436,8 @@ export function useTraining() {
     setStatus('idle');
     setCurrentTask(null);
     currentTaskRef.current = null;
+    setCurrentCustomTask(null);
+    currentCustomTaskRef.current = null;
     setResult(null);
     setTimeRemaining(0);
     elapsedBeforePauseRef.current = 0;
@@ -400,10 +487,12 @@ export function useTraining() {
   return {
     status,
     currentTask,
+    currentCustomTask,
     result,
     timeRemaining,
     getTaskDifficulty,
     startTraining,
+    startCustomTraining,
     pauseTraining,
     resumeTraining,
     stopTraining,

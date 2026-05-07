@@ -10,6 +10,7 @@ import { TrainingHUD } from '@/components/hud/TrainingHUD';
 import { TrainingResultPanel } from '@/components/hud/TrainingResultPanel';
 import { useGameStore } from '@/stores/gameStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useCustomTaskStore } from '@/stores/customTaskStore';
 import { useLocale } from '@/hooks/useTheme';
 import { getButtonIndex } from '@/utils/gamepadMap';
 import type { ButtonMapping } from '@/types/gamepad';
@@ -29,7 +30,9 @@ export function Training() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const taskId = searchParams.get('task');
+  const customTaskId = searchParams.get('custom');
   const locale = useLocale();
+  const customTasks = useCustomTaskStore((s) => s.tasks);
   const pendingStartRef = useRef<TrainingTaskConfig | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
@@ -43,6 +46,7 @@ export function Training() {
     timeRemaining,
     getTaskDifficulty,
     startTraining,
+    startCustomTraining,
     pauseTraining,
     resumeTraining,
     resetTraining,
@@ -64,6 +68,10 @@ export function Training() {
 
   const selectedTask = taskId
     ? TRAINING_TASKS.find(t => t.id === taskId)
+    : null;
+
+  const selectedCustomTask = customTaskId
+    ? customTasks.find(t => t.id === customTaskId) || null
     : null;
 
   // 当前任务的游戏难度（每个任务独立）
@@ -149,7 +157,7 @@ export function Training() {
       if (status === 'playing') return;
 
       // idle 阶段（已选择任务，未开始倒计时）
-      if (status === 'idle' && selectedTask && countdown === null && !isPaused) {
+      if (status === 'idle' && (selectedTask || selectedCustomTask) && countdown === null && !isPaused) {
         pausePhaseRef.current = 'idle';
         setIsPaused(true);
         return;
@@ -225,7 +233,7 @@ export function Training() {
 
   // 手柄开火按钮启动训练
   useEffect(() => {
-    if (status !== 'idle' || !selectedTask || countdown !== null) return;
+    if (status !== 'idle' || !(selectedTask || selectedCustomTask) || countdown !== null) return;
 
     const fireButton = useSettingsStore.getState().gamepadFireButton;
     let prevPressed = false;
@@ -249,7 +257,7 @@ export function Training() {
 
     animId = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(animId);
-  }, [status, selectedTask, countdown, startCountdown]);
+  }, [status, selectedTask, selectedCustomTask, countdown, startCountdown]);
 
   // 手柄 Select/Start 按钮暂停训练
   useEffect(() => {
@@ -307,11 +315,18 @@ export function Training() {
         } else {
           // 首次开始训练 / 重新开始
           const canvas = document.querySelector('canvas');
-          if (pendingStartRef.current && canvas) {
-            const task = pendingStartRef.current;
-            pendingStartRef.current = null;
-            try { canvas.requestPointerLock(); } catch {}
-            startTraining(task, canvas);
+          if (canvas) {
+            // 自定义任务
+            if (selectedCustomTask) {
+              try { canvas.requestPointerLock(); } catch {}
+              startCustomTraining(selectedCustomTask, canvas);
+            } else if (pendingStartRef.current) {
+              // 预设任务
+              const task = pendingStartRef.current;
+              pendingStartRef.current = null;
+              try { canvas.requestPointerLock(); } catch {}
+              startTraining(task, canvas);
+            }
           }
         }
       } else {
@@ -320,7 +335,7 @@ export function Training() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [countdown, isResuming, startTraining]);
+  }, [countdown, isResuming, startTraining, startCustomTraining, selectedCustomTask]);
 
   // Canvas ref callback
   const canvasCallbackRef = useCallback((_node: HTMLCanvasElement | null) => {
@@ -341,8 +356,15 @@ export function Training() {
       // 设置倒计时状态为"重新开始"
       setCountdown(3);
       setIsResuming(false);
+    } else if (selectedCustomTask) {
+      setIsPaused(false);
+      pausePhaseRef.current = null;
+      const canvas = document.querySelector('canvas');
+      resetTraining(canvas);
+      setCountdown(3);
+      setIsResuming(false);
     }
-  }, [currentTask, resetTraining]);
+  }, [currentTask, resetTraining, selectedCustomTask]);
 
   const handleBack = useCallback(() => {
     setIsPaused(false);
@@ -360,10 +382,18 @@ export function Training() {
     }
   }, [selectedTask, status]);
 
+  // 当 selectedCustomTask 变化时，自动开始倒计时
+  useEffect(() => {
+    if (selectedCustomTask && status === 'idle' && countdown === null) {
+      setCountdown(3);
+      setIsResuming(false);
+    }
+  }, [selectedCustomTask, status]);
+
   return (
     <div className="relative min-h-screen">
       {/* 任务选择界面 */}
-      {status === 'idle' && !selectedTask && (
+      {status === 'idle' && !selectedTask && !selectedCustomTask && (
         <div className="max-w-7xl mx-auto px-4 py-8">
           <h1 className="text-3xl font-gaming text-text-primary mb-8">
             {locale['training.chooseTask']}
@@ -400,19 +430,59 @@ export function Training() {
                 </Button>
               </Card>
             ))}
+
+            {/* Custom Tasks */}
+            {customTasks.map((task) => (
+              <Card key={task.id} hoverable className="h-full">
+                <div className="flex items-start justify-between mb-4">
+                  <h3 className="text-xl font-gaming text-text-primary">{task.name}</h3>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary-500/20 text-primary-400">
+                    {locale['custom.badge'] || 'Custom'}
+                  </span>
+                </div>
+                <p className="text-text-secondary mb-4">{task.description || (locale['custom.noDesc'] || 'Custom training task')}</p>
+                <div className="flex items-center gap-4 text-sm text-text-muted mb-4">
+                  <span>{locale[`taskType.${task.category}` as keyof typeof locale] || task.category}</span>
+                  <span>·</span>
+                  <span>{task.duration === 0 ? (locale['training.duration.unlimited'] || 'Unlimited') : `${task.duration / 1000}s`}</span>
+                  <span>·</span>
+                  <span>{task.spawn.maxActive} {locale['training.targets']}</span>
+                </div>
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  onClick={() => navigate(`/training?custom=${task.id}`)}
+                >
+                  {locale['training.start']}
+                </Button>
+              </Card>
+            ))}
+
+            {/* Create Custom Task Card */}
+            <Card hoverable className="h-full flex flex-col items-center justify-center min-h-[200px]" onClick={() => navigate('/custom-task')}>
+              <div className="text-center">
+                <div className="text-4xl mb-3" style={{ color: 'var(--color-text-muted)' }}>+</div>
+                <h3 className="text-lg font-gaming text-text-primary mb-2">
+                  {locale['custom.createTask'] || 'Create Custom Task'}
+                </h3>
+                <p className="text-sm text-text-muted">
+                  {locale['custom.createDesc'] || 'Design your own training scenario'}
+                </p>
+              </div>
+            </Card>
           </div>
         </div>
       )}
 
       {/* 游戏画布 */}
-      {(selectedTask || countdown !== null || status === 'loading' || status === 'playing' || status === 'paused') && (
+      {(selectedTask || selectedCustomTask || countdown !== null || status === 'loading' || status === 'playing' || status === 'paused') && (
         <>
           <canvas
             ref={canvasCallbackRef}
             className="w-full h-screen cursor-none"
             style={{ display: 'block' }}
             onClick={() => {
-              if (status === 'idle' && selectedTask && countdown === null) {
+              if (status === 'idle' && (selectedTask || selectedCustomTask) && countdown === null) {
                 // 点击开始训练
                 startCountdown();
               } else if (status === 'playing' && !isPointerLocked) {
@@ -433,11 +503,11 @@ export function Training() {
           />
 
           {/* 点击开始训练提示（仅在等待开始且无倒计时时显示） */}
-          {status === 'idle' && selectedTask && countdown === null && (
+          {status === 'idle' && (selectedTask || selectedCustomTask) && countdown === null && (
             <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
               <div className="text-center">
                 <div className="text-6xl font-gaming text-accent mb-4 animate-pulse">
-                  {selectedTask.name}
+                  {selectedTask?.name || selectedCustomTask?.name}
                 </div>
                 <div className="bg-surface-900/60 backdrop-blur-sm rounded-lg px-8 py-4 text-text-secondary text-xl">
                   {locale['training.clickToStart']}
