@@ -2,6 +2,9 @@ import * as BABYLON from '@babylonjs/core';
 import { getSceneClearColor } from '@/utils/themeColors';
 import { useSettingsStore } from '@/stores/settingsStore';
 
+const MAX_MOUSE_DELTA_PER_EVENT = 60; // 单次 mousemove 最大像素（防指针锁定重获时巨幅跳变）
+const MIN_MOVEMENT_MAG = 0.5;         // 亚像素噪声过滤
+
 export class GameEngine {
   private canvas: HTMLCanvasElement;
   private engine: BABYLON.Engine;
@@ -10,15 +13,16 @@ export class GameEngine {
   private camera: BABYLON.UniversalCamera | null = null;
   private isPointerLocked: boolean = false;
 
-  // 摄像机控制权热切换
   private activeController: 'mouse' | 'gamepad' | null = null;
   private lastMouseMoveTime: number = 0;
   private lastGamepadMoveTime: number = 0;
   private cameraControlEnabled: boolean = true;
   private readonly CONTROLLER_IDLE_MS = 250;
-  private readonly MOUSE_THRESHOLD = 3;
-  private readonly MOUSE_TAKEOVER_THRESHOLD = 8;
   private readonly GAMEPAD_ACTIVATION_THRESHOLD = 0.08;
+
+  // 缓存的鼠标灵敏度，避免每次 mousemove 事件读 Zustand store
+  private cachedMouseSensitivity: number = 0;
+  private sensitivityCacheTimestamp: number = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -28,46 +32,66 @@ export class GameEngine {
       antialias: true,
     });
 
-    // 响应窗口大小变化
     window.addEventListener('resize', () => this.engine.resize());
 
-    // 监控 FPS
     this.engine.onBeginFrameObservable.add(() => {
       this.fps = this.engine.getFps();
     });
 
-    // 设置指针锁定事件
     this.setupPointerLock();
   }
 
+  /* ───── 指针锁定 & 鼠标输入 ───── */
+
   private setupPointerLock() {
-    // 指针锁定状态变化
     document.addEventListener('pointerlockchange', () => {
       this.isPointerLocked = document.pointerLockElement === (this.canvas as unknown as Element);
     });
 
-    // 鼠标移动 - 控制摄像机视角（手柄活跃时需超过抢占阈值才能接管）
+    // 鼠标移动 — 直接旋转摄像机（同步，与 v2.0.1 一致）
     document.addEventListener('mousemove', (e) => {
-      if (!this.isPointerLocked || !this.camera) return;
+      if (!this.isPointerLocked || !this.camera || !this.cameraControlEnabled) return;
 
-      const movementMag = Math.abs(e.movementX) + Math.abs(e.movementY);
+      const rawDX = e.movementX;
+      const rawDY = e.movementY;
+
+      // 异常值过滤：浏览器偶发报告 NaN 或 ±Infinity
+      if (!isFinite(rawDX) || !isFinite(rawDY)) return;
+
+      const absDX = Math.abs(rawDX);
+      const absDY = Math.abs(rawDY);
+
+      // 噪声过滤
+      if (absDX < MIN_MOVEMENT_MAG && absDY < MIN_MOVEMENT_MAG) return;
+
       const now = performance.now();
 
+      // 手柄活跃时需超过闲置期才允许鼠标接管
       if (this.activeController === 'gamepad') {
         const gamepadIdle = now - this.lastGamepadMoveTime > this.CONTROLLER_IDLE_MS;
-        if (!gamepadIdle && movementMag < this.MOUSE_TAKEOVER_THRESHOLD) return;
+        if (!gamepadIdle) return;
       }
-
-      if (movementMag < this.MOUSE_THRESHOLD) return;
 
       this.activeController = 'mouse';
       this.lastMouseMoveTime = now;
 
-      const sensitivity = 0.002;
-      this.camera.rotation.y += e.movementX * sensitivity;
-      this.camera.rotation.x += e.movementY * sensitivity;
+      // 钳制单次事件增量，防止指针锁定重获时浏览器报告巨幅位移
+      const clampedDX = Math.max(-MAX_MOUSE_DELTA_PER_EVENT, Math.min(MAX_MOUSE_DELTA_PER_EVENT, rawDX));
+      const clampedDY = Math.max(-MAX_MOUSE_DELTA_PER_EVENT, Math.min(MAX_MOUSE_DELTA_PER_EVENT, rawDY));
 
-      // 限制垂直视角范围
+      // 定期刷新缓存的灵敏度（每秒读一次 Zustand store）
+      if (now - this.sensitivityCacheTimestamp > 1000) {
+        this.cachedMouseSensitivity = useSettingsStore.getState().mouseSensitivity * 0.002;
+        this.sensitivityCacheTimestamp = now;
+      }
+
+      const sensitivity = this.cachedMouseSensitivity || useSettingsStore.getState().mouseSensitivity * 0.002;
+
+      // 直接旋转摄像机（同步方式，每个 mousemove 事件立即生效）
+      this.camera.rotation.y += clampedDX * sensitivity;
+      this.camera.rotation.x += clampedDY * sensitivity;
+
+      // 垂直视角限制
       this.camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.camera.rotation.x));
     });
   }
@@ -80,25 +104,21 @@ export class GameEngine {
     document.exitPointerLock();
   }
 
+  /* ───── 场景 & 渲染循环 ───── */
+
   createScene(): BABYLON.Scene {
     this.scene = new BABYLON.Scene(this.engine);
 
-    // 创建摄像机 - 面向目标墙
     this.camera = new BABYLON.UniversalCamera(
       'camera',
       new BABYLON.Vector3(0, 5, -8),
       this.scene
     );
-    // 看向场景中心偏上的位置（目标墙区域）
     this.camera.setTarget(new BABYLON.Vector3(0, 5, 8));
-    // 不使用 attachControl，我们自己处理鼠标输入
     this.camera.speed = 0;
     this.camera.angularSensibility = 1000;
-
-    // 禁用所有默认输入
     this.camera.inputs.clear();
 
-    // 光照 - 从上方照射
     const hemisphericLight = new BABYLON.HemisphericLight(
       'light',
       new BABYLON.Vector3(0, 1, 0),
@@ -106,7 +126,6 @@ export class GameEngine {
     );
     hemisphericLight.intensity = 0.8;
 
-    // 添加方向光增强立体感
     const directionalLight = new BABYLON.DirectionalLight(
       'dirLight',
       new BABYLON.Vector3(-1, -2, 1),
@@ -114,10 +133,7 @@ export class GameEngine {
     );
     directionalLight.intensity = 0.3;
 
-    // 环境 - 使用当前主题背景色
     this.scene.clearColor = getSceneClearColor();
-
-    // 优化：启用硬件缩放
     this.engine.setHardwareScalingLevel(1);
 
     return this.scene;
@@ -140,35 +156,13 @@ export class GameEngine {
     this.engine.dispose();
   }
 
-  getEngine(): BABYLON.Engine {
-    return this.engine;
-  }
-
-  getScene(): BABYLON.Scene | null {
-    return this.scene;
-  }
-
-  getFps(): number {
-    return this.fps;
-  }
-
-  getIsPointerLocked(): boolean {
-    return this.isPointerLocked;
-  }
-
-  setCameraControlEnabled(enabled: boolean) {
-    this.cameraControlEnabled = enabled;
-    if (!enabled) {
-      this.activeController = null;
-    }
-  }
+  /* ───── 手柄控制 ───── */
 
   updateCameraFromGamepad(deltaTime: number) {
     if (!this.camera || deltaTime <= 0 || !this.cameraControlEnabled) return;
 
     const now = performance.now();
 
-    // 当前活跃控制器闲置超时后释放控制权
     if (this.activeController === 'mouse' && now - this.lastMouseMoveTime > this.CONTROLLER_IDLE_MS) {
       this.activeController = null;
     }
@@ -188,7 +182,6 @@ export class GameEngine {
       const ry = gp.axes[3] || 0;
       const magnitude = Math.sqrt(rx ** 2 + ry ** 2);
 
-      // 接管门槛：摇杆需超过激活阈值才能夺取控制权，过滤漂移
       if (this.activeController !== 'gamepad') {
         if (magnitude < this.GAMEPAD_ACTIVATION_THRESHOLD) return;
         if (this.activeController === 'mouse') {
@@ -209,6 +202,8 @@ export class GameEngine {
     }
   }
 
+  /* ───── 杂项 ───── */
+
   updateClearColor(color: BABYLON.Color4) {
     if (this.scene) {
       this.scene.clearColor = color;
@@ -222,6 +217,29 @@ export class GameEngine {
     if (this.scene) {
       this.scene.shadowsEnabled = level !== 'low';
       this.scene.postProcessesEnabled = level === 'high' || level === 'ultra';
+    }
+  }
+
+  getEngine(): BABYLON.Engine {
+    return this.engine;
+  }
+
+  getScene(): BABYLON.Scene | null {
+    return this.scene;
+  }
+
+  getFps(): number {
+    return this.fps;
+  }
+
+  getIsPointerLocked(): boolean {
+    return this.isPointerLocked;
+  }
+
+  setCameraControlEnabled(enabled: boolean) {
+    this.cameraControlEnabled = enabled;
+    if (!enabled) {
+      this.activeController = null;
     }
   }
 }

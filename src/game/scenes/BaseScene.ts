@@ -1,7 +1,7 @@
 import * as BABYLON from '@babylonjs/core';
 import { GameEngine } from '../engine/GameEngine';
 import type { TrainingResult } from '@/types/training';
-import { getSceneGroundColor } from '@/utils/themeColors';
+import { getSceneGroundColor, getSceneWallColor } from '@/utils/themeColors';
 import { getButtonIndex } from '@/utils/gamepadMap';
 
 export abstract class BaseScene {
@@ -19,6 +19,16 @@ export abstract class BaseScene {
 
   // 目标小球颜色（默认淡蓝色 #ADD8E6）
   protected targetColor: BABYLON.Color3 = new BABYLON.Color3(0.68, 0.85, 0.9);
+
+  // 墙壁颜色（默认 null，使用主题自动配色）
+  protected wallColor: BABYLON.Color3 | null = null;
+  protected wallMaterials: BABYLON.StandardMaterial[] = [];
+  protected groundMaterial: BABYLON.StandardMaterial | null = null;
+
+  // 对象池：预先创建的可重用目标
+  protected targetPool: BABYLON.Mesh[] = [];
+  protected targetPoolAvailable: BABYLON.Mesh[] = [];
+  protected readonly POOL_SIZE = 12;
 
   // 手柄开火按键
   protected fireButtonName: string = 'RT';
@@ -100,6 +110,21 @@ export abstract class BaseScene {
     this.fireButtonName = name;
   }
 
+  /** 每帧调用，检测手柄 Select/Start 暂停 */
+  checkGamepadPause(): boolean {
+    const gamepads = navigator.getGamepads();
+    for (const gp of gamepads) {
+      if (!gp) continue;
+      // 检测 Select (8) 和 Start (9) 按钮
+      const selectIdx = 8;
+      const startIdx = 9;
+      if (gp.buttons[selectIdx]?.pressed || gp.buttons[startIdx]?.pressed) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** 每帧调用，检测手柄开火按键 */
   checkGamepadFire() {
     if (!this.isActive) return;
@@ -124,51 +149,98 @@ export abstract class BaseScene {
     this.removeTarget(mesh);
   }
 
+  // 初始化对象池 - 使用共享材质减少 DrawCall
+  protected initTargetPool(): void {
+    // 创建共享材质（所有池内对象共用）
+    const sharedMaterial = new BABYLON.StandardMaterial('targetMat-shared', this.scene);
+    sharedMaterial.diffuseColor = this.targetColor;
+    sharedMaterial.emissiveColor = this.targetColor;
+    sharedMaterial.specularColor = BABYLON.Color3.Black();
+    sharedMaterial.disableLighting = true;
+
+    for (let i = 0; i < this.POOL_SIZE; i++) {
+      const target = BABYLON.MeshBuilder.CreateSphere(
+        `target-pool-${i}`,
+        { diameter: 1, segments: 12 }, // 减少分段数提升性能
+        this.scene
+      );
+      target.setEnabled(false);
+      target.metadata = { isTarget: false, poolIndex: i };
+      target.material = sharedMaterial;
+      target.scaling = new BABYLON.Vector3(1, 1, 1);
+
+      this.targetPool.push(target);
+      this.targetPoolAvailable.push(target);
+    }
+  }
+
+  // 从对象池获取目标 - O(1)
+  protected getPooledTarget(): BABYLON.Mesh | null {
+    if (this.targetPoolAvailable.length === 0) return null;
+    return this.targetPoolAvailable.pop()!;
+  }
+
+  // 将目标归还对象池 - O(1)
+  protected returnTargetToPool(target: BABYLON.Mesh): void {
+    target.setEnabled(false);
+    target.metadata = { isTarget: false, poolIndex: target.metadata?.poolIndex };
+    this.targetPoolAvailable.push(target);
+  }
+
   protected spawnTarget(position: BABYLON.Vector3, size: number = 1): BABYLON.Mesh {
-    const target = BABYLON.MeshBuilder.CreateSphere(
-      `target-${Date.now()}`,
-      { diameter: size, segments: 16 },
-      this.scene
-    );
+    // 优先从对象池获取
+    let target = this.getPooledTarget();
+
+    if (!target) {
+      // 池耗尽时回退到创建新对象（不应该发生）
+      target = BABYLON.MeshBuilder.CreateSphere(
+        `target-${Date.now()}`,
+        { diameter: size, segments: 12 },
+        this.scene
+      );
+      const material = new BABYLON.StandardMaterial(`targetMat-${Date.now()}`, this.scene);
+      material.diffuseColor = this.targetColor;
+      material.emissiveColor = this.targetColor;
+      material.specularColor = BABYLON.Color3.Black();
+      material.disableLighting = true;
+      target.material = material;
+    }
+
+    // 激活目标
     target.position = position;
+    target.scaling = new BABYLON.Vector3(size, size, size);
     target.metadata = {
       isTarget: true,
       spawnTime: performance.now(),
+      poolIndex: target.metadata?.poolIndex,
     };
 
-    // 纯色材质，无光照阴影
-    const material = new BABYLON.StandardMaterial(`targetMat-${Date.now()}`, this.scene);
-    material.diffuseColor = this.targetColor;
-    material.emissiveColor = this.targetColor;
-    material.specularColor = BABYLON.Color3.Black();
-    material.disableLighting = true;
-    target.material = material;
+    // 更新材质颜色（支持动态变色）- 仅非池对象需要更新
+    if (!this.targetPool.includes(target)) {
+      const mat = target.material as BABYLON.StandardMaterial;
+      if (mat) {
+        mat.diffuseColor = this.targetColor;
+        mat.emissiveColor = this.targetColor;
+      }
+    }
 
+    target.setEnabled(true);
     this.targets.push(target);
     return target;
   }
 
   protected removeTarget(mesh: BABYLON.Mesh) {
     // 立即从数组中移除，让生成逻辑能及时补充目标
-    this.targets = this.targets.filter(t => t !== mesh);
+    const idx = this.targets.indexOf(mesh);
+    if (idx !== -1) this.targets.splice(idx, 1);
     mesh.metadata.isTarget = false;
 
-    // 消失动画（mesh 仍在场景中播放动画，结束后清理）
-    const animation = new BABYLON.Animation(
-      'scaleDown',
-      'scaling',
-      60,
-      BABYLON.Animation.ANIMATIONTYPE_VECTOR3,
-      BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
-    );
-    animation.setKeys([
-      { frame: 0, value: mesh.scaling.clone() },
-      { frame: 10, value: new BABYLON.Vector3(0, 0, 0) },
-    ]);
-    mesh.animations.push(animation);
-    this.scene.beginAnimation(mesh, 0, 10, false, 1, () => {
+    // 即时归还对象池，不创建 Animation 对象，杜绝 GC 卡顿
+    if (this.targetPool.includes(mesh)) {
+      this.returnTargetToPool(mesh);
+    } else {
       mesh.dispose();
-    });
+    }
   }
 
   protected calculateScore(): number {
@@ -189,10 +261,11 @@ export abstract class BaseScene {
     );
     ground.position.y = 0;
     const groundMat = new BABYLON.StandardMaterial('groundMat', this.scene);
-    groundMat.diffuseColor = getSceneGroundColor();
+    groundMat.diffuseColor = this.wallColor ?? getSceneGroundColor();
     groundMat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
     ground.material = groundMat;
     ground.receiveShadows = true;
+    this.groundMaterial = groundMat;
     return ground;
   }
 
@@ -202,21 +275,113 @@ export abstract class BaseScene {
     this.targetLifetime = targetLifetime;
   }
 
+  // 所有墙壁材质名称，用于按名查找更新（兜底策略）
+  private static readonly WALL_MAT_NAMES = ['wallMat', 'boxLeftMat', 'boxRightMat', 'boxCeilingMat'];
+
   // 设置目标小球颜色（接受 hex 字符串如 '#ADD8E6'）
   setTargetColor(hex: string) {
+    if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return;
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
     const b = parseInt(hex.slice(5, 7), 16) / 255;
     this.targetColor = new BABYLON.Color3(r, g, b);
 
-    // 立即更新已有目标的颜色
-    for (const target of this.targets) {
-      const mat = target.material as BABYLON.StandardMaterial;
-      if (mat?.diffuseColor) {
-        mat.diffuseColor = this.targetColor;
-        mat.emissiveColor = this.targetColor;
+    // 更新对象池的共享材质颜色
+    const sharedMat = this.scene.getMaterialByName('targetMat-shared') as BABYLON.StandardMaterial;
+    if (sharedMat) {
+      sharedMat.diffuseColor = this.targetColor;
+      sharedMat.emissiveColor = this.targetColor;
+    }
+  }
+
+  // 设置墙壁颜色（接受 hex 字符串如 '#1a1a2e'，传空字符串恢复主题默认）
+  setWallColor(hex: string) {
+    if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      this.wallColor = null;
+      const defaultWall = getSceneWallColor();
+      const defaultGround = getSceneGroundColor();
+      this.applyWallColorToAll(defaultWall, defaultGround);
+      return;
+    }
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    this.wallColor = new BABYLON.Color3(r, g, b);
+    this.applyWallColorToAll(this.wallColor);
+  }
+
+  // 将给定颜色写到所有墙壁材质和地面
+  private applyWallColorToAll(wallColor: BABYLON.Color3, groundColor?: BABYLON.Color3) {
+    // 1. 通过注册的材质数组更新
+    for (const mat of this.wallMaterials) {
+      mat.diffuseColor = wallColor;
+    }
+    // 2. 按名称兜底更新（覆盖数组未注册到的材质）
+    for (const name of BaseScene.WALL_MAT_NAMES) {
+      const mat = this.scene.getMaterialByName(name) as BABYLON.StandardMaterial;
+      if (mat && !this.wallMaterials.includes(mat)) {
+        mat.diffuseColor = wallColor;
       }
     }
+    // 3. 天花板：保持 createBoxWalls 中建立的 0.9 倍比例
+    const ceilingMat = this.scene.getMaterialByName('boxCeilingMat') as BABYLON.StandardMaterial;
+    if (ceilingMat) {
+      ceilingMat.diffuseColor = wallColor.scale(0.9);
+    }
+    // 4. 地面：保持 0.85 倍比例
+    if (this.groundMaterial) {
+      this.groundMaterial.diffuseColor = groundColor ?? wallColor.scale(0.85);
+    }
+  }
+
+  // 子类在创建墙壁后调用此方法注册墙壁材质，以支持动态换色
+  protected registerWallMaterial(mat: BABYLON.StandardMaterial) {
+    this.wallMaterials.push(mat);
+    if (this.wallColor) {
+      mat.diffuseColor = this.wallColor;
+    }
+  }
+
+  /** 创建训练盒侧面墙壁（左墙、右墙、天花板），用于包围训练空间 */
+  protected createBoxWalls(options?: { width?: number; height?: number; depth?: number; yOffset?: number }) {
+    const width = options?.width ?? 16;
+    const height = options?.height ?? 10;
+    const depth = options?.depth ?? 8;
+    const yOffset = options?.yOffset ?? 2;
+    const wallZ = depth;
+    const wallColor = this.wallColor ?? getSceneWallColor();
+
+    const specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
+
+    // 左墙
+    const leftWall = BABYLON.MeshBuilder.CreatePlane('boxLeftWall', { width: depth, height }, this.scene);
+    leftWall.rotation.y = Math.PI / 2;
+    leftWall.position = new BABYLON.Vector3(-width / 2, height / 2 + yOffset, wallZ / 2);
+    const leftMat = new BABYLON.StandardMaterial('boxLeftMat', this.scene);
+    leftMat.diffuseColor = wallColor;
+    leftMat.specularColor = specularColor;
+    leftWall.material = leftMat;
+    this.registerWallMaterial(leftMat);
+
+    // 右墙
+    const rightWall = BABYLON.MeshBuilder.CreatePlane('boxRightWall', { width: depth, height }, this.scene);
+    rightWall.rotation.y = -Math.PI / 2;
+    rightWall.position = new BABYLON.Vector3(width / 2, height / 2 + yOffset, wallZ / 2);
+    const rightMat = new BABYLON.StandardMaterial('boxRightMat', this.scene);
+    rightMat.diffuseColor = wallColor;
+    rightMat.specularColor = specularColor;
+    rightWall.material = rightMat;
+    this.registerWallMaterial(rightMat);
+
+    // 天花板
+    const ceiling = BABYLON.MeshBuilder.CreatePlane('boxCeiling', { width, height: depth }, this.scene);
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position = new BABYLON.Vector3(0, height + yOffset, wallZ / 2);
+    const ceilingMat = new BABYLON.StandardMaterial('boxCeilingMat', this.scene);
+    ceilingMat.diffuseColor = wallColor.scale(0.9);
+    ceilingMat.specularColor = specularColor;
+    ceiling.material = ceilingMat;
+    this.registerWallMaterial(ceilingMat);
   }
 
   // 检查过期目标（困难/地狱模式）

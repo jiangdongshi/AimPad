@@ -25,20 +25,24 @@ export class GridshotScene extends BaseScene {
   private config: GridshotConfig;
   private gridLines: BABYLON.LinesMesh[] = [];
 
+  // 格子占用追踪：key = "row,col"，value = mesh
+  private occupiedCells = new Map<string, BABYLON.Mesh>();
+
+  // 补充队列：避免同帧内创建多个目标造成卡顿
+  private spawnQueue: number = 0;
+  private lastSpawnTime: number = 0;
+  private static readonly SPAWN_COOLDOWN_MS = 50; // 补充间隔 50ms，肉眼不可感知
+
   constructor(engine: GameEngine, config?: Partial<GridshotConfig>) {
     super(engine, 'gridshot');
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
   async setup() {
-    // 创建训练场地面
     this.createGround(20, 20);
-
-    // 创建网格背景线
     this.createGridLines();
-
-    // 创建边界墙
     this.createWalls();
+    this.initTargetPool();
 
     // 初始生成目标
     for (let i = 0; i < this.config.targetCount; i++) {
@@ -51,41 +55,104 @@ export class GridshotScene extends BaseScene {
 
     const now = performance.now();
 
-    // 检查过期目标（困难/地狱模式）
     this.checkExpiredTargets();
 
-    // 实时保持场上小球数量等于 targetCount，一旦不足立即补足
-    while (this.targets.length < this.config.targetCount) {
-      this.spawnRandomTarget();
+    // 检测场上活跃目标数量（removeTarget 已同步从数组移除，length 即活跃数）
+    const missingCount = this.config.targetCount - this.targets.length;
+
+    if (missingCount > this.spawnQueue) {
+      this.spawnQueue = missingCount;
     }
 
-    // 检查训练时间（duration=0 表示不限时间）
+    // 按冷却间隔逐个补充，避免同帧批量创建造成卡顿
+    if (this.spawnQueue > 0 && now - this.lastSpawnTime >= GridshotScene.SPAWN_COOLDOWN_MS) {
+      if (this.spawnRandomTarget()) {
+        this.spawnQueue--;
+        this.lastSpawnTime = now;
+      } else {
+        // 没有空格子可用了，清空队列
+        this.spawnQueue = 0;
+      }
+    }
+
     if (this.config.duration > 0 && now - this.startTime > this.config.duration) {
       this.stop();
     }
   }
 
-  private spawnRandomTarget() {
+  /** 生成目标，返回是否成功（无空格子时返回 false） */
+  private spawnRandomTarget(): boolean {
     const { gridRows, gridCols, targetSize } = this.config;
+    const availableCells = this.getAvailableCells(gridRows, gridCols);
+
+    if (availableCells.length === 0) return false;
+
+    const [row, col] = availableCells[Math.floor(Math.random() * availableCells.length)];
     const cellWidth = 14 / gridCols;
     const cellHeight = 8 / gridRows;
 
-    const row = Math.floor(Math.random() * gridRows);
-    const col = Math.floor(Math.random() * gridCols);
-
     const x = (col - gridCols / 2 + 0.5) * cellWidth;
     const y = (row + 0.5) * cellHeight + 2;
-    const z = 8; // 固定在目标墙上
+    const z = 8;
 
-    this.spawnTarget(new BABYLON.Vector3(x, y, z), targetSize * this.targetSizeMultiplier);
+    const mesh = this.spawnTarget(new BABYLON.Vector3(x, y, z), targetSize * this.targetSizeMultiplier);
+    const cellKey = `${row},${col}`;
+    mesh.metadata = { ...mesh.metadata, cellKey };
+    this.occupiedCells.set(cellKey, mesh);
+
+    return true;
+  }
+
+  /** 获取当前未被占用的格子列表 */
+  private getAvailableCells(rows: number, cols: number): [number, number][] {
+    const cells: [number, number][] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!this.occupiedCells.has(`${r},${c}`)) {
+          cells.push([r, c]);
+        }
+      }
+    }
+    return cells;
+  }
+
+  protected onTargetHit(mesh: BABYLON.Mesh) {
+    // 先释放格子，再调用父类移除逻辑
+    const cellKey = mesh.metadata?.cellKey as string | undefined;
+    if (cellKey) {
+      this.occupiedCells.delete(cellKey);
+    }
+    super.onTargetHit(mesh);
+  }
+
+  protected checkExpiredTargets() {
+    if (this.targetLifetime <= 0) return;
+
+    const now = performance.now();
+    const expired: BABYLON.Mesh[] = [];
+
+    for (const target of this.targets) {
+      const spawnTime = target.metadata?.spawnTime || 0;
+      if (spawnTime > 0 && now - spawnTime > this.targetLifetime) {
+        expired.push(target);
+      }
+    }
+
+    for (const target of expired) {
+      const cellKey = target.metadata?.cellKey as string | undefined;
+      if (cellKey) {
+        this.occupiedCells.delete(cellKey);
+      }
+      this.misses++;
+      this.removeTarget(target);
+    }
   }
 
   private createGridLines() {
     const { gridRows, gridCols } = this.config;
     const gridColor = getSceneGridColor();
-    const gridZ = 8; // 与目标位置一致
+    const gridZ = 8;
 
-    // 垂直线
     for (let i = 0; i <= gridCols; i++) {
       const x = (i - gridCols / 2) * (14 / gridCols);
       const line = BABYLON.MeshBuilder.CreateLines(
@@ -102,7 +169,6 @@ export class GridshotScene extends BaseScene {
       this.gridLines.push(line);
     }
 
-    // 水平线
     for (let i = 0; i <= gridRows; i++) {
       const y = i * (8 / gridRows) + 2;
       const line = BABYLON.MeshBuilder.CreateLines(
@@ -121,19 +187,21 @@ export class GridshotScene extends BaseScene {
   }
 
   private createWalls() {
-    // 后墙（目标墙背景）
     const backWall = BABYLON.MeshBuilder.CreatePlane('backWall', { width: 16, height: 10 }, this.scene);
     backWall.position = new BABYLON.Vector3(0, 6, 8.1);
 
-    // 墙壁材质 - 跟随主题
     const wallMat = new BABYLON.StandardMaterial('wallMat', this.scene);
-    wallMat.diffuseColor = getSceneWallColor();
+    wallMat.diffuseColor = this.wallColor ?? getSceneWallColor();
     wallMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
 
     backWall.material = wallMat;
+    this.registerWallMaterial(wallMat);
+
+    this.createBoxWalls({ width: 16, height: 10, depth: 8, yOffset: 1 });
   }
 
   dispose() {
+    this.occupiedCells.clear();
     this.gridLines.forEach(l => l.dispose());
     super.dispose();
   }
