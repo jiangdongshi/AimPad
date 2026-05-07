@@ -26,6 +26,17 @@ const BALL_COLOR_PRESETS = [
   '#FF69B4', // 粉色
 ];
 
+const WALL_COLOR_PRESETS = [
+  '#1a1a2e', // 深蓝黑
+  '#0f1923', // 暗蓝灰
+  '#2d2d3f', // 暗紫灰
+  '#1e1e2e', // 深紫黑
+  '#1a2a1a', // 深绿黑
+  '#2a1a1a', // 深红黑
+  '#1c1c1c', // 纯黑
+  '#2a2a3a', // 暗蓝紫
+];
+
 export function Training() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -53,6 +64,8 @@ export function Training() {
     setGameDifficulty,
     ballColor,
     setBallColor,
+    wallColor,
+    setWallColor,
     getTaskDuration,
     setTaskDuration,
   } = useTraining();
@@ -63,6 +76,7 @@ export function Training() {
   const [showDifficultyPopup, setShowDifficultyPopup] = useState(false);
   const [showDurationPopup, setShowDurationPopup] = useState(false);
   const [showColorPopup, setShowColorPopup] = useState(false);
+  const [showWallColorPopup, setShowWallColorPopup] = useState(false);
   const pausePhaseRef = useRef<'idle' | 'countdown' | 'resume-countdown' | null>(null); // 暂停时所处阶段
   const pausedDifficultySnapshotRef = useRef<GameDifficulty | null>(null); // 暂停时的难度快照（仅首次暂停时记录，防止被难度变化覆盖）
 
@@ -101,7 +115,7 @@ export function Training() {
 
   // 弹窗外部点击关闭
   useEffect(() => {
-    if (!showDifficultyPopup && !showDurationPopup && !showColorPopup) return;
+    if (!showDifficultyPopup && !showDurationPopup && !showColorPopup && !showWallColorPopup) return;
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (showDifficultyPopup && !target.closest('[data-difficulty-popup]')) {
@@ -113,10 +127,13 @@ export function Training() {
       if (showColorPopup && !target.closest('[data-color-popup]')) {
         setShowColorPopup(false);
       }
+      if (showWallColorPopup && !target.closest('[data-wall-color-popup]')) {
+        setShowWallColorPopup(false);
+      }
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [showDifficultyPopup, showDurationPopup, showColorPopup]);
+  }, [showDifficultyPopup, showDurationPopup, showColorPopup, showWallColorPopup]);
 
   // 暂停时退出指针锁定，并记录暂停时的难度快照（仅在进入暂停时记录一次）
   useEffect(() => {
@@ -152,6 +169,10 @@ export function Training() {
         setShowColorPopup(false);
         return;
       }
+      if (showWallColorPopup) {
+        setShowWallColorPopup(false);
+        return;
+      }
 
       // 游戏进行中的 ESC 由 pointerlockchange 处理，这里不管
       if (status === 'playing') return;
@@ -174,7 +195,7 @@ export function Training() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [status, selectedTask, countdown, isPaused, showDifficultyPopup, showDurationPopup, showColorPopup]);
+  }, [status, selectedTask, countdown, isPaused, showDifficultyPopup, showDurationPopup, showColorPopup, showWallColorPopup]);
 
   const handleStart = useCallback(async (task: TrainingTaskConfig) => {
     // 先导航到带 task 参数的 URL，让 canvas 渲染出来
@@ -231,15 +252,14 @@ export function Training() {
     resumeTrainingRef.current = resumeTraining;
   }, [resumeTraining, gameDifficulty, resetTraining]);
 
-  // 手柄开火按钮启动训练
+  // 手柄开火按钮启动训练（100ms 轮询即可，无需 rAF 全帧率轮询）
   useEffect(() => {
     if (status !== 'idle' || !(selectedTask || selectedCustomTask) || countdown !== null) return;
 
     const fireButton = useSettingsStore.getState().gamepadFireButton;
     let prevPressed = false;
-    let animId: number;
 
-    const poll = () => {
+    const id = setInterval(() => {
       const gamepads = navigator.getGamepads();
       for (const gp of gamepads) {
         if (!gp) continue;
@@ -252,11 +272,9 @@ export function Training() {
         prevPressed = pressed;
         break;
       }
-      animId = requestAnimationFrame(poll);
-    };
+    }, 100);
 
-    animId = requestAnimationFrame(poll);
-    return () => cancelAnimationFrame(animId);
+    return () => clearInterval(id);
   }, [status, selectedTask, selectedCustomTask, countdown, startCountdown]);
 
   // 手柄 Select/Start 按钮暂停训练
@@ -686,7 +704,7 @@ export function Training() {
                 </div>
 
                 {/* 小球颜色选择 */}
-                <div className="mb-8">
+                <div className="mb-6">
                   <div
                     className="text-sm mb-3"
                     style={{ color: 'var(--color-text-secondary)' }}
@@ -736,6 +754,102 @@ export function Training() {
                                   setShowColorPopup(false);
                                 }}
                                 className="rounded-full transition-all"
+                                style={{
+                                  width: '28px',
+                                  height: '28px',
+                                  backgroundColor: color,
+                                  border: selected
+                                    ? '3px solid #2563EB'
+                                    : '2px solid var(--color-border)',
+                                  transform: selected ? 'scale(1.15)' : 'scale(1)',
+                                  boxShadow: selected ? '0 0 10px rgba(37, 99, 235, 0.5)' : 'none',
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 墙壁颜色选择 */}
+                <div className="mb-8">
+                  <div
+                    className="text-sm mb-3"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
+                    {locale['training.wallColor'] || 'Wall Color'}
+                  </div>
+                  <div className="relative inline-block" data-wall-color-popup>
+                    <button
+                      onClick={() => setShowWallColorPopup(!showWallColorPopup)}
+                      className="px-5 py-2.5 rounded-xl text-sm font-medium inline-flex items-center gap-2"
+                      style={{
+                        backgroundColor: 'var(--color-bg-surface-hover)',
+                        border: '1px solid #2563EB',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <span
+                        className="inline-block rounded"
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          backgroundColor: wallColor || 'var(--color-bg-primary)',
+                        }}
+                      />
+                      <span style={{ color: '#2563EB', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {wallColor ? wallColor : (locale['training.wallAuto'] || 'Auto')}
+                      </span>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: '#2563EB', transform: showWallColorPopup ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}>
+                        <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+
+                    {showWallColorPopup && (
+                      <div
+                        className="absolute top-full mt-2 left-1/2 -translate-x-1/2 rounded-xl py-3 px-3 z-10"
+                        style={{
+                          backgroundColor: 'var(--color-bg-surface)',
+                          border: '1px solid var(--color-border)',
+                          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                        }}
+                      >
+                        <div className="flex gap-2.5 justify-center flex-wrap items-center">
+                          {/* Auto (theme default) */}
+                          <button
+                            onClick={() => {
+                              setWallColor('');
+                              setShowWallColorPopup(false);
+                            }}
+                            className="rounded-lg transition-all flex items-center justify-center"
+                            style={{
+                              width: '32px',
+                              height: '28px',
+                              backgroundColor: 'var(--color-bg-primary)',
+                              border: !wallColor
+                                ? '3px solid #2563EB'
+                                : '2px solid var(--color-border)',
+                              transform: !wallColor ? 'scale(1.1)' : 'scale(1)',
+                              boxShadow: !wallColor ? '0 0 10px rgba(37, 99, 235, 0.5)' : 'none',
+                              fontSize: '0.6rem',
+                              color: 'var(--color-text-muted)',
+                            }}
+                            title={locale['training.wallAuto'] || 'Auto'}
+                          >
+                            A
+                          </button>
+                          {WALL_COLOR_PRESETS.map((color) => {
+                            const selected = wallColor === color;
+                            return (
+                              <button
+                                key={color}
+                                onClick={() => {
+                                  setWallColor(color);
+                                  setShowWallColorPopup(false);
+                                }}
+                                className="rounded-lg transition-all"
                                 style={{
                                   width: '28px',
                                   height: '28px',

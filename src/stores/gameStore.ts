@@ -21,6 +21,7 @@ interface GameState {
   updateScore: (hits: number, misses: number) => void;
   setTimeRemaining: (time: number) => void;
   setFps: (fps: number) => void;
+  updateFrameData: (data: { hits: number; misses: number; timeRemaining: number; fps: number }) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -68,4 +69,8 @@ export const useGameStore = create<GameState>((set) => ({
   setTimeRemaining: (time) => set({ timeRemaining: time }),
 
   setFps: (fps) => set({ fps }),
+
+  // 批量更新帧数据，避免多次 setState 触发重复渲染
+  updateFrameData: (data: { hits: number; misses: number; timeRemaining: number; fps: number }) =>
+    set(data),
 }));

@@ -40,31 +40,35 @@ export function getSceneClearColor(): Color4 {
   return new Color4(r, g, b, 1);
 }
 
-/** Ground: slightly lighter than background, low specular */
+/** Ground: noticeably different from wall and background */
 export function getSceneGroundColor(): Color3 {
   const [r, g, b] = readBgRgb();
   const isLight = luminance(r, g, b) > 0.4;
-  const offset = isLight ? -0.04 : 0.05;
+  const offset = isLight ? -0.12 : 0.05;
   return new Color3(clamp(r + offset), clamp(g + offset), clamp(b + offset));
 }
 
-/** Wall: slightly lighter than ground */
+/** Wall: target surface, distinct from ground */
 export function getSceneWallColor(): Color3 {
   const [r, g, b] = readBgRgb();
   const isLight = luminance(r, g, b) > 0.4;
-  const offset = isLight ? -0.02 : 0.07;
+  const offset = isLight ? -0.06 : 0.07;
   return new Color3(clamp(r + offset), clamp(g + offset), clamp(b + offset));
 }
 
-/** Grid/guide lines: contrast against background, min difference 0.1 */
+/** Grid/guide lines: strong contrast against wall */
 export function getSceneGridColor(): Color3 {
   const [r, g, b] = readBgRgb();
   const isLight = luminance(r, g, b) > 0.4;
-  const offset = isLight ? -0.12 : 0.1;
+  const offset = isLight ? -0.20 : 0.12;
   const cr = clamp(r + offset);
   const cg = clamp(g + offset);
   const cb = clamp(b + offset);
-  if (Math.abs(cr - r) < 0.06) return new Color3(r > 0.5 ? r - 0.1 : r + 0.1, g > 0.5 ? g - 0.1 : g + 0.1, b > 0.5 ? b - 0.1 : b + 0.1);
+  if (Math.abs(luminance(cr, cg, cb) - luminance(r, g, b)) < 0.06) {
+    return isLight
+      ? new Color3(clamp(r - 0.25), clamp(g - 0.25), clamp(b - 0.25))
+      : new Color3(clamp(r + 0.18), clamp(g + 0.18), clamp(b + 0.18));
+  }
   return new Color3(cr, cg, cb);
 }
 

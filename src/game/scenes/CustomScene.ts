@@ -68,6 +68,9 @@ export class CustomScene extends BaseScene {
     // 创建地面
     this.createGround(20, 20);
 
+    // 初始化对象池（复用 BaseScene 的池化机制，避免每次生成创建新 Mesh 造成 GC 卡顿）
+    this.initTargetPool();
+
     // 创建显示元素（网格或轨道）
     if (this.config.display?.showLines) {
       this.createDisplayElements();
@@ -146,10 +149,18 @@ export class CustomScene extends BaseScene {
       backWall.position = new BABYLON.Vector3(0, 2 + display.wallHeight / 2, gridZ + 0.1);
 
       const wallMat = new BABYLON.StandardMaterial('wallMat', this.scene);
-      wallMat.diffuseColor = this.hexToColor3(display.wallColor);
+      wallMat.diffuseColor = this.wallColor ?? this.hexToColor3(display.wallColor);
       wallMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
       backWall.material = wallMat;
+      this.registerWallMaterial(wallMat);
     }
+
+    this.createBoxWalls({
+      width: 16,
+      height: display.wallHeight,
+      depth: 8,
+      yOffset: 2,
+    });
   }
 
   private createTrackGuide() {
@@ -310,30 +321,6 @@ export class CustomScene extends BaseScene {
 
     const position = new BABYLON.Vector3(centerX, centerY, 8);
     this.spawnTarget(position, this.config.target.size);
-  }
-
-  protected spawnTarget(position: BABYLON.Vector3, size: number = 1): BABYLON.Mesh {
-    const target = BABYLON.MeshBuilder.CreateSphere(
-      `target-${Date.now()}-${Math.random()}`,
-      { diameter: size, segments: 16 },
-      this.scene
-    );
-    target.position = position;
-    target.metadata = {
-      isTarget: true,
-      spawnTime: performance.now(),
-    };
-
-    // 材质
-    const material = new BABYLON.StandardMaterial(`targetMat-${Date.now()}`, this.scene);
-    material.diffuseColor = this.targetColor;
-    material.emissiveColor = this.targetColor;
-    material.specularColor = BABYLON.Color3.Black();
-    material.disableLighting = true;
-    target.material = material;
-
-    this.targets.push(target);
-    return target;
   }
 
   private spawnRandomTarget() {
