@@ -2,7 +2,7 @@ import * as BABYLON from '@babylonjs/core';
 import { BaseScene } from './BaseScene';
 import { GameEngine } from '../engine/GameEngine';
 import { calculateSmoothness } from '@/utils/scoring';
-import { getSceneGridColor } from '@/utils/themeColors';
+import { getSceneGridColor, getSceneWallColor } from '@/utils/themeColors';
 
 interface SphereTrackConfig {
   targetSize: number;
@@ -34,6 +34,18 @@ export class SphereTrackScene extends BaseScene {
   async setup() {
     // 创建训练场地面
     this.createGround(20, 20);
+
+    // 创建后墙
+    const backWall = BABYLON.MeshBuilder.CreatePlane('backWall', { width: 16, height: 10 }, this.scene);
+    backWall.position = new BABYLON.Vector3(0, 6, 8.1);
+    const wallMat = new BABYLON.StandardMaterial('wallMat', this.scene);
+    wallMat.diffuseColor = this.wallColor ?? getSceneWallColor();
+    wallMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
+    backWall.material = wallMat;
+    this.registerWallMaterial(wallMat);
+
+    // 创建侧面和天花板
+    this.createBoxWalls({ width: 16, height: 10, depth: 8, yOffset: 1 });
 
     // 创建圆形轨道参考线
     this.createTrackGuide();

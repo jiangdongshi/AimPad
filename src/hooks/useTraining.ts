@@ -18,7 +18,11 @@ type TrainingStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'completed';
 const DIFFICULTY_STORAGE_KEY = 'aimpad_task_difficulties';
 const BALL_COLOR_STORAGE_KEY = 'aimpad_ball_color';
 const DEFAULT_BALL_COLOR = '#ADD8E6';
+const WALL_COLOR_STORAGE_KEY = 'aimpad_wall_color';
 const DURATION_STORAGE_KEY = 'aimpad_task_durations';
+
+// React 状态同步节流：100ms 一次批量更新，避免每帧触发重渲染
+const STATE_SYNC_MS = 100;
 
 export type TaskDuration = 30000 | 45000 | 60000 | 0;
 
@@ -59,19 +63,25 @@ export function useTraining() {
       return DEFAULT_BALL_COLOR;
     }
   });
+  const [wallColor, setWallColorState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(WALL_COLOR_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [taskDurations, setTaskDurations] = useState<Record<string, TaskDuration>>(loadTaskDurations);
 
   const engineRef = useRef<GameEngine | null>(null);
   const sceneRef = useRef<BaseScene | null>(null);
   const animFrameRef = useRef<number>(0);
-  const pauseTimeRef = useRef<number>(0); // 暂停时的时间点
-  const elapsedBeforePauseRef = useRef<number>(0); // 暂停前已用时间
-  const currentTaskRef = useRef<TrainingTaskConfig | null>(null); // 用 ref 存储 currentTask
-  const currentCustomTaskRef = useRef<CustomTask | null>(null); // 用 ref 存储 currentCustomTask
+  const pauseTimeRef = useRef<number>(0);
+  const elapsedBeforePauseRef = useRef<number>(0);
+  const currentTaskRef = useRef<TrainingTaskConfig | null>(null);
+  const currentCustomTaskRef = useRef<CustomTask | null>(null);
 
-  // 获取 gameStore 的更新方法
-  const updateScore = useGameStore((s) => s.updateScore);
-  const setFps = useGameStore((s) => s.setFps);
+  // 使用批量更新避免每帧多次 setState
+  const updateFrameData = useGameStore((s) => s.updateFrameData);
 
   // 监听主题变化，实时更新 3D 场景背景色
   useEffect(() => {
@@ -88,12 +98,10 @@ export function useTraining() {
     return () => observer.disconnect();
   }, []);
 
-  // 获取指定任务的难度（未设置过则默认 'hard'）
   const getTaskDifficulty = useCallback((taskId: string): GameDifficulty => {
     return taskDifficulties[taskId] ?? 'hard';
   }, [taskDifficulties]);
 
-  // 获取指定任务的时长（未设置过则使用任务默认值）
   const getTaskDuration = useCallback((taskId: string, defaultDuration: number): number => {
     return taskDurations[taskId] ?? defaultDuration;
   }, [taskDurations]);
@@ -102,11 +110,8 @@ export function useTraining() {
     const engine = new GameEngine(canvas);
     engineRef.current = engine;
 
-    // 应用当前任务的难度配置
     const difficulty = taskDifficulties[task.id] ?? 'hard';
     const diffConfig = GAME_DIFFICULTY_CONFIG[difficulty];
-
-    // 应用当前任务的时长配置
     const duration = taskDurations[task.id] ?? task.duration;
 
     let scene: BaseScene;
@@ -138,14 +143,15 @@ export function useTraining() {
 
     scene.setDifficulty(diffConfig.targetSizeMultiplier, diffConfig.targetLifetime);
     scene.setTargetColor(ballColor);
+    if (wallColor) scene.setWallColor(wallColor);
     scene.setFireButton(useSettingsStore.getState().gamepadFireButton);
     return scene;
-  }, [taskDifficulties, taskDurations, ballColor]);
+  }, [taskDifficulties, taskDurations, ballColor, wallColor]);
 
   const startTraining = useCallback(async (task: TrainingTaskConfig, canvas: HTMLCanvasElement) => {
     setStatus('loading');
     setCurrentTask(task);
-    currentTaskRef.current = task; // 同步更新 ref
+    currentTaskRef.current = task;
     setResult(null);
     elapsedBeforePauseRef.current = 0;
 
@@ -156,10 +162,11 @@ export function useTraining() {
       await scene.setup();
       scene.start();
 
-      // 启动渲染循环
       const startTime = performance.now();
       let lastTime = startTime;
       let fpsUpdateCounter = 0;
+      let lastStateSync = 0;
+      let lastTimeRemaining = -1;
 
       const renderLoop = () => {
         const now = performance.now();
@@ -167,30 +174,39 @@ export function useTraining() {
         lastTime = now;
 
         scene.update(deltaTime);
-
-        // 检测手柄开火
         scene.checkGamepadFire();
 
-        // 同步统计数据到 gameStore
         const stats = scene.getStats();
-        updateScore(stats.hits, stats.misses);
 
-        // 更新 FPS（每 10 帧更新一次避免频繁渲染）
-        fpsUpdateCounter++;
-        if (fpsUpdateCounter >= 10) {
-          const engine = engineRef.current;
-          if (engine) {
-            setFps(Math.round(engine.getFps()));
-          }
-          fpsUpdateCounter = 0;
-        }
-
-        // 更新剩余时间（减去暂停前已用时间）
+        // 计算剩余时间（一次计算，状态同步 + 结束检测共用）
         const elapsed = now - startTime + elapsedBeforePauseRef.current;
         const duration = taskDurations[task.id] ?? task.duration;
         const remaining = duration > 0 ? Math.max(0, duration - elapsed) : -1;
-        setTimeRemaining(duration > 0 ? Math.ceil(remaining / 1000) : -1);
+        const displayTime = duration > 0 ? Math.ceil(remaining / 1000) : -1;
 
+        // 节流状态同步：100ms 间隔，且仅在值变化时更新（避免无意义重渲染）
+        if (now - lastStateSync >= STATE_SYNC_MS) {
+          fpsUpdateCounter++;
+          const fps = fpsUpdateCounter >= 6
+            ? Math.round(engineRef.current?.getFps() ?? 0)
+            : useGameStore.getState().fps;
+          if (fpsUpdateCounter >= 6) fpsUpdateCounter = 0;
+
+          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses) {
+            updateFrameData({
+              hits: stats.hits,
+              misses: stats.misses,
+              timeRemaining: displayTime,
+              fps,
+            });
+            setTimeRemaining(displayTime);
+            lastTimeRemaining = displayTime;
+          }
+
+          lastStateSync = now;
+        }
+
+        // 训练结束检测（每帧检查，确保精确）
         if (duration <= 0 || remaining > 0) {
           animFrameRef.current = requestAnimationFrame(renderLoop);
         } else {
@@ -206,7 +222,7 @@ export function useTraining() {
       console.error('Failed to start training:', error);
       setStatus('idle');
     }
-  }, [createScene, updateScore, setFps, taskDurations]);
+  }, [createScene, updateFrameData, taskDurations]);
 
   const handleTrainingEnd = useCallback(async () => {
     if (!sceneRef.current) return;
@@ -215,14 +231,12 @@ export function useTraining() {
     setResult(trainingResult);
     setStatus('completed');
 
-    // 保存结果到 IndexedDB
     try {
       await trainingStorage.saveRecord(trainingResult);
     } catch (error) {
       console.error('Failed to save training result:', error);
     }
 
-    // 停止渲染循环
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
     }
@@ -234,7 +248,6 @@ export function useTraining() {
   const pauseTraining = useCallback(() => {
     if (status === 'playing') {
       pauseTimeRef.current = performance.now();
-      // 只停止游戏逻辑循环，保持 Babylon 渲染循环运行（避免恢复时 shader 重编译导致卡顿）
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = 0;
@@ -246,13 +259,13 @@ export function useTraining() {
 
   const resumeTraining = useCallback(() => {
     if (status === 'paused' && currentTask && sceneRef.current) {
-      // 计算暂停期间经过的时间
       const pauseDuration = performance.now() - pauseTimeRef.current;
       elapsedBeforePauseRef.current += pauseDuration;
 
-      // 仅重启游戏逻辑循环（Babylon 渲染循环从未停止，无需重启）
       let lastTime = performance.now();
       let fpsUpdateCounter = 0;
+      let lastStateSync = 0;
+      let lastTimeRemaining = useGameStore.getState().timeRemaining;
       const scene = sceneRef.current;
 
       const renderLoop = () => {
@@ -261,29 +274,35 @@ export function useTraining() {
         lastTime = now;
 
         scene.update(deltaTime);
-
-        // 检测手柄开火
         scene.checkGamepadFire();
 
-        // 同步统计数据到 gameStore
         const stats = scene.getStats();
-        updateScore(stats.hits, stats.misses);
 
-        // 更新 FPS（每 10 帧更新一次）
-        fpsUpdateCounter++;
-        if (fpsUpdateCounter >= 10) {
-          const engine = engineRef.current;
-          if (engine) {
-            setFps(Math.round(engine.getFps()));
-          }
-          fpsUpdateCounter = 0;
-        }
-
-        // 更新剩余时间
         const elapsed = now - pauseTimeRef.current + elapsedBeforePauseRef.current;
         const duration = taskDurations[currentTask.id] ?? currentTask.duration;
         const remaining = duration > 0 ? Math.max(0, duration - elapsed) : -1;
-        setTimeRemaining(duration > 0 ? Math.ceil(remaining / 1000) : -1);
+        const displayTime = duration > 0 ? Math.ceil(remaining / 1000) : -1;
+
+        if (now - lastStateSync >= STATE_SYNC_MS) {
+          fpsUpdateCounter++;
+          const fps = fpsUpdateCounter >= 6
+            ? Math.round(engineRef.current?.getFps() ?? 0)
+            : useGameStore.getState().fps;
+          if (fpsUpdateCounter >= 6) fpsUpdateCounter = 0;
+
+          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses) {
+            updateFrameData({
+              hits: stats.hits,
+              misses: stats.misses,
+              timeRemaining: displayTime,
+              fps,
+            });
+            setTimeRemaining(displayTime);
+            lastTimeRemaining = displayTime;
+          }
+
+          lastStateSync = now;
+        }
 
         if (duration <= 0 || remaining > 0) {
           animFrameRef.current = requestAnimationFrame(renderLoop);
@@ -296,7 +315,7 @@ export function useTraining() {
       engineRef.current?.setCameraControlEnabled(true);
       setStatus('playing');
     }
-  }, [status, currentTask, handleTrainingEnd, updateScore, setFps, taskDurations]);
+  }, [status, currentTask, handleTrainingEnd, updateFrameData, taskDurations]);
 
   const stopTraining = useCallback(() => {
     handleTrainingEnd();
@@ -316,25 +335,25 @@ export function useTraining() {
       const engine = new GameEngine(canvas);
       engineRef.current = engine;
 
-      // 应用难度配置
       const difficulty = 'hard';
       const diffConfig = GAME_DIFFICULTY_CONFIG[difficulty];
 
       const scene = new CustomScene(engine, task, task.id);
       sceneRef.current = scene;
 
-      // 应用难度和颜色
       scene.setDifficulty(diffConfig.targetSizeMultiplier, diffConfig.targetLifetime);
       scene.setTargetColor(ballColor);
+      if (wallColor) scene.setWallColor(wallColor);
       scene.setFireButton(useSettingsStore.getState().gamepadFireButton);
 
       await scene.setup();
       scene.start();
 
-      // 启动渲染循环
       const startTime = performance.now();
       let lastTime = startTime;
       let fpsUpdateCounter = 0;
+      let lastStateSync = 0;
+      let lastTimeRemaining = -1;
 
       const renderLoop = () => {
         const now = performance.now();
@@ -345,22 +364,32 @@ export function useTraining() {
         scene.checkGamepadFire();
 
         const stats = scene.getStats();
-        updateScore(stats.hits, stats.misses);
 
-        fpsUpdateCounter++;
-        if (fpsUpdateCounter >= 10) {
-          const eng = engineRef.current;
-          if (eng) {
-            setFps(Math.round(eng.getFps()));
-          }
-          fpsUpdateCounter = 0;
-        }
-
-        // 更新剩余时间
         const duration = task.duration || 0;
         const elapsed = now - startTime + elapsedBeforePauseRef.current;
         const remaining = duration > 0 ? Math.max(0, duration - elapsed) : -1;
-        setTimeRemaining(duration > 0 ? Math.ceil(remaining / 1000) : -1);
+        const displayTime = duration > 0 ? Math.ceil(remaining / 1000) : -1;
+
+        if (now - lastStateSync >= STATE_SYNC_MS) {
+          fpsUpdateCounter++;
+          const fps = fpsUpdateCounter >= 6
+            ? Math.round(engineRef.current?.getFps() ?? 0)
+            : useGameStore.getState().fps;
+          if (fpsUpdateCounter >= 6) fpsUpdateCounter = 0;
+
+          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses) {
+            updateFrameData({
+              hits: stats.hits,
+              misses: stats.misses,
+              timeRemaining: displayTime,
+              fps,
+            });
+            setTimeRemaining(displayTime);
+            lastTimeRemaining = displayTime;
+          }
+
+          lastStateSync = now;
+        }
 
         if (duration <= 0 || remaining > 0) {
           animFrameRef.current = requestAnimationFrame(renderLoop);
@@ -374,13 +403,12 @@ export function useTraining() {
       engineRef.current?.setCameraControlEnabled(true);
       setStatus('playing');
 
-      // 更新游玩次数
       useCustomTaskStore.getState().incrementPlayCount(task.id);
     } catch (error) {
       console.error('Failed to start custom training:', error);
       setStatus('idle');
     }
-  }, [ballColor, updateScore, setFps, handleTrainingEnd]);
+  }, [ballColor, wallColor, updateFrameData, handleTrainingEnd]);
 
   const setGameDifficulty = useCallback((taskId: string, difficulty: GameDifficulty) => {
     setTaskDifficulties((prev) => {
@@ -388,7 +416,6 @@ export function useTraining() {
       try { localStorage.setItem(DIFFICULTY_STORAGE_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
-    // 如果当前活跃的场景就是这个任务，立即应用新难度
     if (sceneRef.current && currentTaskRef.current?.id === taskId) {
       const config = GAME_DIFFICULTY_CONFIG[difficulty];
       sceneRef.current.setDifficulty(config.targetSizeMultiplier, config.targetLifetime);
@@ -400,6 +427,14 @@ export function useTraining() {
     try { localStorage.setItem(BALL_COLOR_STORAGE_KEY, color); } catch {}
     if (sceneRef.current) {
       sceneRef.current.setTargetColor(color);
+    }
+  }, []);
+
+  const setWallColor = useCallback((color: string) => {
+    setWallColorState(color);
+    try { localStorage.setItem(WALL_COLOR_STORAGE_KEY, color); } catch {}
+    if (sceneRef.current) {
+      sceneRef.current.setWallColor(color);
     }
   }, []);
 
@@ -416,7 +451,6 @@ export function useTraining() {
       cancelAnimationFrame(animFrameRef.current);
     }
 
-    // 在销毁引擎前，先用当前主题背景色清除画布
     if (canvas) {
       const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
       if (gl) {
@@ -443,17 +477,13 @@ export function useTraining() {
     elapsedBeforePauseRef.current = 0;
   }, []);
 
-  // 因难度变化重启：清理场景/引擎，但保留 currentTask 供 UI 使用
-  // 使用 requestAnimationFrame 分帧执行，避免阻塞 UI
   const restartForDifficulty = useCallback((canvas?: HTMLCanvasElement | null) => {
     return new Promise<void>((resolve) => {
-      // 第一步：取消动画帧
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = 0;
       }
 
-      // 第二步：在下一帧清理画布
       requestAnimationFrame(() => {
         if (canvas) {
           const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
@@ -465,14 +495,12 @@ export function useTraining() {
           }
         }
 
-        // 第三步：再下一帧清理场景和引擎
         requestAnimationFrame(() => {
           sceneRef.current?.dispose();
           engineRef.current?.dispose();
           sceneRef.current = null;
           engineRef.current = null;
 
-          // 更新状态
           setStatus('idle');
           setResult(null);
           setTimeRemaining(0);
@@ -501,6 +529,8 @@ export function useTraining() {
     setGameDifficulty,
     ballColor,
     setBallColor,
+    wallColor,
+    setWallColor,
     getTaskDuration,
     setTaskDuration,
     taskDurations,
