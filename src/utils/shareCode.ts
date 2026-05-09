@@ -1,12 +1,13 @@
 /**
  * 分享码编解码工具
  *
- * 分享码格式: Base64URL(Config) 前12字符 + CRC16(Config) 4字符 = 16字符
+ * 分享码格式: Base64URL(JSON) + CRC16 4字符
+ * 无长度限制，完整编码整个配置
  *
  * 设计:
- * - 使用 Base64URL 编码（URL 安全）
- * - CRC16 校验确保数据完整性
- * - 压缩可选，对于简单配置直接编码即可
+ * - 使用 Base64URL 编码（URL 安全，无 +/=/）
+ * - CRC16 校验放在末尾，用于验证数据完整性
+ * - 解码时取最后 4 字符作为 CRC，前面为编码数据
  */
 
 import type { SceneConfig } from '@/types/customTask';
@@ -80,51 +81,34 @@ function base64UrlDecode(str: string): string {
 
 /**
  * 编码配置为分享码
+ * 格式: Base64URL(JSON) + CRC16
  * @param config 场景配置
- * @returns 16 位分享码
+ * @returns 完整的分享码字符串
  */
 export function encodeShareCode(config: SceneConfig): string {
   const json = JSON.stringify(config);
   const encoded = base64UrlEncode(json);
   const checksum = crc16(encoded);
-  const code = (encoded + checksum).slice(0, 16);
-  return code;
-}
-
-/**
- * 从分享码提取编码数据（不验证 CRC）
- */
-function extractEncodedData(code: string): { encoded: string; checksum: string } {
-  if (code.length !== 16) {
-    throw new Error('Invalid share code length');
-  }
-  const encoded = code.slice(0, 12);
-  const checksum = code.slice(12, 16);
-  return { encoded, checksum };
-}
-
-/**
- * 验证 CRC16 校验码
- */
-function verifyCRC(encoded: string, expectedChecksum: string): boolean {
-  const actualCRC = crc16(encoded);
-  return actualCRC === expectedChecksum.toUpperCase();
+  return encoded + checksum;
 }
 
 /**
  * 解码分享码为配置
- * @param code 16 位分享码
+ * 格式: 前面是 Base64URL 编码数据，最后 4 字符是 CRC16 校验码
+ * @param code 分享码
  * @returns 场景配置，如果校验失败返回 null
  */
 export function decodeShareCode(code: string): SceneConfig | null {
   try {
-    code = code.trim().toUpperCase();
-    if (code.length !== 16) {
-      console.error('[ShareCode] Invalid code length:', code.length);
+    code = code.trim();
+
+    if (code.length < 8) {
+      console.error('[ShareCode] Code too short:', code.length);
       return null;
     }
 
-    const { encoded, checksum } = extractEncodedData(code);
+    const encoded = code.slice(0, -4);
+    const checksum = code.slice(-4);
 
     if (!verifyCRC(encoded, checksum)) {
       console.error('[ShareCode] CRC verification failed');
@@ -134,7 +118,7 @@ export function decodeShareCode(code: string): SceneConfig | null {
     const json = base64UrlDecode(encoded);
     const config = JSON.parse(json) as SceneConfig;
 
-    if (!config.name || !config.target || !config.movement || !config.spawn) {
+    if (!config.target || !config.movement || !config.spawn) {
       console.error('[ShareCode] Invalid config structure');
       return null;
     }
@@ -147,22 +131,16 @@ export function decodeShareCode(code: string): SceneConfig | null {
 }
 
 /**
- * 验证分享码格式是否合法（不验证 CRC）
+ * 验证 CRC16 校验码
  */
-export function isValidShareCodeFormat(code: string): boolean {
-  if (!code || typeof code !== 'string') return false;
-  const trimmed = code.trim().toUpperCase();
-  if (trimmed.length !== 16) return false;
-  return /^[A-Z0-9]{16}$/.test(trimmed);
+function verifyCRC(encoded: string, expectedChecksum: string): boolean {
+  const actualCRC = crc16(encoded);
+  return actualCRC === expectedChecksum.toUpperCase();
 }
 
 /**
- * 格式化分享码（添加空格分隔便于阅读）
+ * 格式化分享码（直接返回原始字符串）
  */
 export function formatShareCode(code: string): string {
-  if (code.length !== 16) return code;
-  return code.slice(0, 4).toUpperCase() + ' ' +
-         code.slice(4, 8).toUpperCase() + ' ' +
-         code.slice(8, 12).toUpperCase() + ' ' +
-         code.slice(12, 16).toUpperCase();
+  return code;
 }

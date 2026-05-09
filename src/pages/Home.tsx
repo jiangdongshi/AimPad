@@ -3,9 +3,11 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { TRAINING_TASKS } from '@/types/training';
 import { useLocale } from '@/hooks/useTheme';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 export function Home() {
   const locale = useLocale();
+  const isZh = useSettingsStore((s) => s.locale) === 'zh';
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -77,7 +79,7 @@ export function Home() {
                     {locale[`difficulty.${task.difficulty}` as keyof typeof locale]}
                   </span>
                 </div>
-                <p className="text-sm text-text-secondary">{task.description}</p>
+                <p className="text-sm text-text-secondary">{isZh ? task.description : task.descriptionEn}</p>
                 <div className="mt-3 flex items-center gap-2 text-xs text-text-muted">
                   <span>{locale[`taskType.${task.type}` as keyof typeof locale]}</span>
                   <span>·</span>

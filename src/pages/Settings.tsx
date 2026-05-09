@@ -21,6 +21,7 @@ const FIRE_BUTTON_OPTIONS: { value: string; label: string }[] = [
 export function Settings() {
   const {
     theme,
+    locale: localeId,
     gamepadDeadzone,
     gamepadSensitivity,
     gamepadInvertY,
@@ -43,6 +44,7 @@ export function Settings() {
 
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const locale = useLocale();
+  const isZh = localeId === 'zh';
 
   const [showFireButtonPopup, setShowFireButtonPopup] = useState(false);
 
@@ -175,13 +177,13 @@ export function Settings() {
                       className="text-xs font-medium"
                       style={{ color: 'var(--color-text-primary)' }}
                     >
-                      {t.name}
+                    {isZh ? t.name : t.nameEn}
                     </span>
                     <span
                       className="text-xs"
                       style={{ color: 'var(--color-text-muted)' }}
                     >
-                      {t.nameEn}
+                      {isZh ? t.description : t.descriptionEn}
                     </span>
                   </button>
                 );

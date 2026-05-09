@@ -10,9 +10,9 @@ export function LanguageSwitcher() {
     <button
       onClick={() => updateSettings({ locale: isZh ? 'en' : 'zh' })}
       className="flex items-center justify-center w-9 h-9 rounded-md bg-surface-700 hover:bg-surface-600 transition-colors text-sm font-medium text-text-secondary hover:text-text-primary"
-      title={isZh ? 'Switch to English' : '切换到中文'}
+      title={isZh ? '切换到英文' : 'Switch to Chinese'}
     >
-      {isZh ? '中' : 'EN'}
+      {isZh ? 'EN' : '中'}
     </button>
   );
 }

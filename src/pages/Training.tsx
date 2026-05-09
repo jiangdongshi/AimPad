@@ -43,8 +43,13 @@ export function Training() {
   const taskId = searchParams.get('task');
   const customTaskId = searchParams.get('custom');
   const locale = useLocale();
+  const isZh = useSettingsStore((s) => s.locale) === 'zh';
   const customTasks = useCustomTaskStore((s) => s.tasks);
+  const favorites = useCustomTaskStore((s) => s.favorites);
+  const toggleFavorite = useCustomTaskStore((s) => s.toggleFavorite);
+  const removeTask = useCustomTaskStore((s) => s.removeTask);
   const pendingStartRef = useRef<TrainingTaskConfig | null>(null);
+  const [activeTab, setActiveTab] = useState<'preset' | 'custom' | 'favorites'>('preset');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
@@ -416,22 +421,51 @@ export function Training() {
           <h1 className="text-3xl font-gaming text-text-primary mb-8">
             {locale['training.chooseTask']}
           </h1>
+
+          {/* Tab Bar */}
+          <div className="flex gap-2 mb-6">
+            {(['preset', 'custom', 'favorites'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className="px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
+                style={{
+                  backgroundColor: activeTab === tab ? '#2563EB' : 'var(--color-bg-surface)',
+                  color: activeTab === tab ? '#fff' : 'var(--color-text-secondary)',
+                  border: activeTab === tab ? '1px solid #2563EB' : '1px solid var(--color-border)',
+                }}
+              >
+                {locale[`training.tab.${tab}` as keyof typeof locale]}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {TRAINING_TASKS.map((task) => (
+            {/* Preset Tasks Tab */}
+            {activeTab === 'preset' && TRAINING_TASKS.map((task) => (
               <Card key={task.id} hoverable className="h-full">
                 <div className="flex items-start justify-between mb-4">
                   <h3 className="text-xl font-gaming text-text-primary">{task.name}</h3>
-                  <span className={`
-                    px-2.5 py-1 rounded-full text-xs font-medium
-                    ${task.difficulty === 'beginner' ? 'bg-success/20 text-success' :
-                      task.difficulty === 'intermediate' ? 'bg-warning/20 text-warning' :
-                      task.difficulty === 'advanced' ? 'bg-danger/20 text-danger' :
-                      'bg-primary-500/20 text-primary-400'}
-                  `}>
-                    {locale[`difficulty.${task.difficulty}` as keyof typeof locale]}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`
+                      px-2.5 py-1 rounded-full text-xs font-medium
+                      ${task.difficulty === 'beginner' ? 'bg-success/20 text-success' :
+                        task.difficulty === 'intermediate' ? 'bg-warning/20 text-warning' :
+                        task.difficulty === 'advanced' ? 'bg-danger/20 text-danger' :
+                        'bg-primary-500/20 text-primary-400'}
+                    `}>
+                      {locale[`difficulty.${task.difficulty}` as keyof typeof locale]}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleFavorite(task.id); }}
+                      className="p-1 rounded transition-colors"
+                      style={{ color: favorites.includes(task.id) ? '#f59e0b' : 'var(--color-text-muted)' }}
+                    >
+                      {favorites.includes(task.id) ? '★' : '☆'}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-text-secondary mb-4">{task.description}</p>
+                <p className="text-text-secondary mb-4">{isZh ? task.description : task.descriptionEn}</p>
                 <div className="flex items-center gap-4 text-sm text-text-muted mb-4">
                   <span>{locale[`taskType.${task.type}` as keyof typeof locale]}</span>
                   <span>·</span>
@@ -449,14 +483,35 @@ export function Training() {
               </Card>
             ))}
 
-            {/* Custom Tasks */}
-            {customTasks.map((task) => (
+            {/* Custom Tasks Tab */}
+            {activeTab === 'custom' && customTasks.map((task) => (
               <Card key={task.id} hoverable className="h-full">
                 <div className="flex items-start justify-between mb-4">
                   <h3 className="text-xl font-gaming text-text-primary">{task.name}</h3>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary-500/20 text-primary-400">
-                    {locale['custom.badge'] || 'Custom'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary-500/20 text-primary-400">
+                      {locale['custom.badge'] || 'Custom'}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleFavorite(task.id); }}
+                      className="p-1 rounded transition-colors"
+                      style={{ color: favorites.includes(task.id) ? '#f59e0b' : 'var(--color-text-muted)' }}
+                    >
+                      {favorites.includes(task.id) ? '★' : '☆'}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(locale['training.deleteConfirm'])) {
+                          removeTask(task.id);
+                        }
+                      }}
+                      className="p-1 rounded transition-colors"
+                      style={{ color: 'var(--color-text-muted)' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 <p className="text-text-secondary mb-4">{task.description || (locale['custom.noDesc'] || 'Custom training task')}</p>
                 <div className="flex items-center gap-4 text-sm text-text-muted mb-4">
@@ -476,18 +531,117 @@ export function Training() {
               </Card>
             ))}
 
-            {/* Create Custom Task Card */}
-            <Card hoverable className="h-full flex flex-col items-center justify-center min-h-[200px]" onClick={() => navigate('/custom-task')}>
-              <div className="text-center">
-                <div className="text-4xl mb-3" style={{ color: 'var(--color-text-muted)' }}>+</div>
-                <h3 className="text-lg font-gaming text-text-primary mb-2">
-                  {locale['custom.createTask'] || 'Create Custom Task'}
-                </h3>
-                <p className="text-sm text-text-muted">
-                  {locale['custom.createDesc'] || 'Design your own training scenario'}
-                </p>
+            {/* Create Custom Task Card (only in custom tab) */}
+            {activeTab === 'custom' && (
+              <Card hoverable className="h-full flex flex-col items-center justify-center min-h-[200px]" onClick={() => navigate('/custom-task')}>
+                <div className="text-center">
+                  <div className="text-4xl mb-3" style={{ color: 'var(--color-text-muted)' }}>+</div>
+                  <h3 className="text-lg font-gaming text-text-primary mb-2">
+                    {locale['custom.createTask'] || 'Create Custom Task'}
+                  </h3>
+                  <p className="text-sm text-text-muted">
+                    {locale['custom.createDesc'] || 'Design your own training scenario'}
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {/* Favorites Tab */}
+            {activeTab === 'favorites' && favorites.length === 0 && (
+              <div className="col-span-full text-center py-16">
+                <p className="text-text-muted text-lg">{locale['training.noFavorites']}</p>
               </div>
-            </Card>
+            )}
+            {activeTab === 'favorites' && favorites.map((favId) => {
+              const presetTask = TRAINING_TASKS.find(t => t.id === favId);
+              const customTask = customTasks.find(t => t.id === favId);
+              const task = presetTask || customTask;
+              if (!task) return null;
+
+              const isPreset = !!presetTask;
+              return (
+                <Card key={favId} hoverable className="h-full">
+                  <div className="flex items-start justify-between mb-4">
+                    <h3 className="text-xl font-gaming text-text-primary">{task.name}</h3>
+                    <div className="flex items-center gap-2">
+                      {isPreset ? (
+                        <span className={`
+                          px-2.5 py-1 rounded-full text-xs font-medium
+                          ${(task as TrainingTaskConfig).difficulty === 'beginner' ? 'bg-success/20 text-success' :
+                            (task as TrainingTaskConfig).difficulty === 'intermediate' ? 'bg-warning/20 text-warning' :
+                            (task as TrainingTaskConfig).difficulty === 'advanced' ? 'bg-danger/20 text-danger' :
+                            'bg-primary-500/20 text-primary-400'}
+                        `}>
+                          {locale[`difficulty.${(task as TrainingTaskConfig).difficulty}` as keyof typeof locale]}
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary-500/20 text-primary-400">
+                          {locale['custom.badge'] || 'Custom'}
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleFavorite(favId); }}
+                        className="p-1 rounded transition-colors"
+                        style={{ color: '#f59e0b' }}
+                      >
+                        ★
+                      </button>
+                      {!isPreset && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(locale['training.deleteConfirm'])) {
+                              removeTask(favId);
+                            }
+                          }}
+                          className="p-1 rounded transition-colors"
+                          style={{ color: 'var(--color-text-muted)' }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-text-secondary mb-4">
+                    {isPreset
+                      ? (isZh ? (task as TrainingTaskConfig).description : (task as TrainingTaskConfig).descriptionEn)
+                      : ((task as any).description || locale['custom.noDesc'])}
+                  </p>
+                  <div className="flex items-center gap-4 text-sm text-text-muted mb-4">
+                    {isPreset ? (
+                      <>
+                        <span>{locale[`taskType.${(task as TrainingTaskConfig).type}` as keyof typeof locale]}</span>
+                        <span>·</span>
+                        <span>{(task as TrainingTaskConfig).duration / 1000}s</span>
+                        <span>·</span>
+                        <span>{(task as TrainingTaskConfig).parameters.targetCount} {locale['training.targets']}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>{locale[`taskType.${(task as any).category}` as keyof typeof locale] || (task as any).category}</span>
+                        <span>·</span>
+                        <span>{(task as any).duration === 0 ? locale['training.duration.unlimited'] : `${(task as any).duration / 1000}s`}</span>
+                        <span>·</span>
+                        <span>{(task as any).spawn.maxActive} {locale['training.targets']}</span>
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={() => {
+                      if (isPreset) {
+                        handleStart(task as TrainingTaskConfig);
+                      } else {
+                        navigate(`/training?custom=${favId}`);
+                      }
+                    }}
+                  >
+                    {locale['training.start']}
+                  </Button>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}
@@ -630,11 +784,11 @@ export function Training() {
                           className="px-5 py-2 text-xs"
                           style={{ color: 'var(--color-text-muted)' }}
                         >
-                          {gameDifficulty === 'easy' && '目标放大 1.5x'}
-                          {gameDifficulty === 'simple' && '默认难度'}
-                          {gameDifficulty === 'normal' && '目标缩小 0.7x'}
-                          {gameDifficulty === 'hard' && '目标缩小 0.5x · 2秒后消失'}
-                          {gameDifficulty === 'hell' && '目标缩小 0.3x · 1.2秒后消失'}
+                          {gameDifficulty === 'easy' && locale['difficulty.easy.desc']}
+                          {gameDifficulty === 'simple' && locale['difficulty.simple.desc']}
+                          {gameDifficulty === 'normal' && locale['difficulty.normal.desc']}
+                          {gameDifficulty === 'hard' && locale['difficulty.hard.desc']}
+                          {gameDifficulty === 'hell' && locale['difficulty.hell.desc']}
                         </div>
                       </div>
                     )}

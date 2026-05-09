@@ -11,6 +11,8 @@ import { encodeShareCode, decodeShareCode } from '@/utils/shareCode';
 interface CustomTaskState {
   // 自定义任务列表
   tasks: CustomTask[];
+  // 收藏的任务 ID 列表（包含预设和自定义任务）
+  favorites: string[];
 
   // 操作方法
   addTask: (config: SceneConfig) => CustomTask;
@@ -21,6 +23,8 @@ interface CustomTaskState {
   incrementPlayCount: (id: string) => void;
   importFromShareCode: (code: string) => CustomTask | null;
   clearAllTasks: () => void;
+  toggleFavorite: (id: string) => void;
+  isFavorite: (id: string) => boolean;
 }
 
 const STORAGE_KEY = 'aimpad-custom-tasks';
@@ -29,6 +33,7 @@ export const useCustomTaskStore = create<CustomTaskState>()(
   persist(
     (set, get) => ({
       tasks: [],
+      favorites: [],
 
       addTask: (config: SceneConfig): CustomTask => {
         const now = Date.now();
@@ -110,6 +115,18 @@ export const useCustomTaskStore = create<CustomTaskState>()(
 
       clearAllTasks: () => {
         set({ tasks: [] });
+      },
+
+      toggleFavorite: (id: string) => {
+        set((state) => ({
+          favorites: state.favorites.includes(id)
+            ? state.favorites.filter((f) => f !== id)
+            : [...state.favorites, id],
+        }));
+      },
+
+      isFavorite: (id: string): boolean => {
+        return get().favorites.includes(id);
       },
     }),
     {

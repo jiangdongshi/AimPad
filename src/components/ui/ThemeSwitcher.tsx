@@ -2,12 +2,15 @@ import { useState, useRef, useEffect } from 'react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { THEMES } from '@/types/theme';
 import type { ThemeId } from '@/types/theme';
+import { useLocale } from '@/hooks/useTheme';
 
 export function ThemeSwitcher() {
   const [open, setOpen] = useState(false);
   const theme = useSettingsStore((s) => s.theme);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
   const ref = useRef<HTMLDivElement>(null);
+  const locale = useLocale();
+  const isZh = useSettingsStore((s) => s.locale) === 'zh';
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -35,7 +38,7 @@ export function ThemeSwitcher() {
           backgroundColor: 'var(--color-bg-surface-hover)',
           color: 'var(--color-text-secondary)',
         }}
-        title="切换主题"
+        title={locale['theme.switch']}
       >
         <span className="flex gap-0.5">
           <span
@@ -47,7 +50,7 @@ export function ThemeSwitcher() {
             style={{ backgroundColor: current.preview.accent, border: '1px solid var(--color-text-muted)' }}
           />
         </span>
-        <span className="text-xs hidden sm:inline">{current.name}</span>
+        <span className="text-xs hidden sm:inline">{isZh ? current.name : current.nameEn}</span>
         <svg
           className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
           style={{ color: 'var(--color-text-muted)' }}
@@ -101,8 +104,8 @@ export function ThemeSwitcher() {
                   />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-medium">{t.name}</div>
-                  <div className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{t.description}</div>
+                  <div className="text-sm font-medium">{isZh ? t.name : t.nameEn}</div>
+                  <div className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{isZh ? t.description : t.descriptionEn}</div>
                 </div>
                 {isActive && (
                   <svg className="w-4 h-4 shrink-0 ml-auto" style={{ color: '#2563EB' }} fill="currentColor" viewBox="0 0 20 20">
