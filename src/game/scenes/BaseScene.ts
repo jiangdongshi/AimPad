@@ -263,6 +263,7 @@ export abstract class BaseScene {
     const groundMat = new BABYLON.StandardMaterial('groundMat', this.scene);
     groundMat.diffuseColor = this.wallColor ?? getSceneGroundColor();
     groundMat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
+    groundMat.backFaceCulling = false;
     ground.material = groundMat;
     ground.receiveShadows = true;
     this.groundMaterial = groundMat;
@@ -276,7 +277,7 @@ export abstract class BaseScene {
   }
 
   // 所有墙壁材质名称，用于按名查找更新（兜底策略）
-  private static readonly WALL_MAT_NAMES = ['wallMat', 'boxLeftMat', 'boxRightMat', 'boxCeilingMat'];
+  private static readonly WALL_MAT_NAMES = ['wallMat', 'roomMat'];
 
   // 设置目标小球颜色（接受 hex 字符串如 '#ADD8E6'）
   setTargetColor(hex: string) {
@@ -312,23 +313,18 @@ export abstract class BaseScene {
 
   // 将给定颜色写到所有墙壁材质和地面
   private applyWallColorToAll(wallColor: BABYLON.Color3, groundColor?: BABYLON.Color3) {
-    // 1. 通过注册的材质数组更新
+    // 1. 遍历注册的材质（包括 roomMat 和各个子类的 wallMat）
     for (const mat of this.wallMaterials) {
       mat.diffuseColor = wallColor;
     }
-    // 2. 按名称兜底更新（覆盖数组未注册到的材质）
+    // 2. 按名称兜底
     for (const name of BaseScene.WALL_MAT_NAMES) {
       const mat = this.scene.getMaterialByName(name) as BABYLON.StandardMaterial;
       if (mat && !this.wallMaterials.includes(mat)) {
         mat.diffuseColor = wallColor;
       }
     }
-    // 3. 天花板：保持 createBoxWalls 中建立的 0.9 倍比例
-    const ceilingMat = this.scene.getMaterialByName('boxCeilingMat') as BABYLON.StandardMaterial;
-    if (ceilingMat) {
-      ceilingMat.diffuseColor = wallColor.scale(0.9);
-    }
-    // 4. 地面：保持 0.85 倍比例
+    // 3. 地面保持 0.85 倍比例
     if (this.groundMaterial) {
       this.groundMaterial.diffuseColor = groundColor ?? wallColor.scale(0.85);
     }
@@ -342,46 +338,34 @@ export abstract class BaseScene {
     }
   }
 
-  /** 创建训练盒侧面墙壁（左墙、右墙、天花板），用于包围训练空间 */
+  /**
+   * 创建封闭训练房间 — 单一 CreateBox + 单一材质 + backFaceCulling=false。
+   *
+   * 盒子 z ∈ [-10, 8]，覆盖 z=8 到 z=-10 范围（depth=18，居中 z=-1），
+   * 确保相机（z=-8）在盒子内部 2 单位，背后有完整墙壁。
+   * y ∈ [0, height + 2] 确保从地面到天花板完全封闭。
+   *
+   * 所有六个面共用同一个材质，修改 diffuseColor 即可统一换色。
+   * 子类的 backWall（z≈8）恰好与盒子的前面对齐，颜色相同，无视觉接缝。
+   */
   protected createBoxWalls(options?: { width?: number; height?: number; depth?: number; yOffset?: number }) {
     const width = options?.width ?? 16;
     const height = options?.height ?? 10;
-    const depth = options?.depth ?? 8;
-    const yOffset = options?.yOffset ?? 2;
-    const wallZ = depth;
     const wallColor = this.wallColor ?? getSceneWallColor();
 
-    const specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
+    // 单材质，所有墙面统一颜色
+    const roomMat = new BABYLON.StandardMaterial('roomMat', this.scene);
+    roomMat.diffuseColor = wallColor;
+    roomMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
+    roomMat.backFaceCulling = false;
 
-    // 左墙
-    const leftWall = BABYLON.MeshBuilder.CreatePlane('boxLeftWall', { width: depth, height }, this.scene);
-    leftWall.rotation.y = Math.PI / 2;
-    leftWall.position = new BABYLON.Vector3(-width / 2, height / 2 + yOffset, wallZ / 2);
-    const leftMat = new BABYLON.StandardMaterial('boxLeftMat', this.scene);
-    leftMat.diffuseColor = wallColor;
-    leftMat.specularColor = specularColor;
-    leftWall.material = leftMat;
-    this.registerWallMaterial(leftMat);
+    // 盒子：宽 width，高 height+2（覆盖天花板），深 18（z∈[-10,8]）
+    const box = BABYLON.MeshBuilder.CreateBox('roomBox', { width, height: height + 2, depth: 18 }, this.scene);
+    box.position = new BABYLON.Vector3(0, height / 2, -1);
+    box.material = roomMat;
+    box.isPickable = false;
 
-    // 右墙
-    const rightWall = BABYLON.MeshBuilder.CreatePlane('boxRightWall', { width: depth, height }, this.scene);
-    rightWall.rotation.y = -Math.PI / 2;
-    rightWall.position = new BABYLON.Vector3(width / 2, height / 2 + yOffset, wallZ / 2);
-    const rightMat = new BABYLON.StandardMaterial('boxRightMat', this.scene);
-    rightMat.diffuseColor = wallColor;
-    rightMat.specularColor = specularColor;
-    rightWall.material = rightMat;
-    this.registerWallMaterial(rightMat);
-
-    // 天花板
-    const ceiling = BABYLON.MeshBuilder.CreatePlane('boxCeiling', { width, height: depth }, this.scene);
-    ceiling.rotation.x = Math.PI / 2;
-    ceiling.position = new BABYLON.Vector3(0, height + yOffset, wallZ / 2);
-    const ceilingMat = new BABYLON.StandardMaterial('boxCeilingMat', this.scene);
-    ceilingMat.diffuseColor = wallColor.scale(0.9);
-    ceilingMat.specularColor = specularColor;
-    ceiling.material = ceilingMat;
-    this.registerWallMaterial(ceilingMat);
+    this.registerWallMaterial(roomMat);
   }
 
   // 检查过期目标（困难/地狱模式）

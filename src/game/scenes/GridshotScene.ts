@@ -187,17 +187,22 @@ export class GridshotScene extends BaseScene {
   }
 
   private createWalls() {
-    const backWall = BABYLON.MeshBuilder.CreatePlane('backWall', { width: 16, height: 10 }, this.scene);
-    backWall.position = new BABYLON.Vector3(0, 6, 8.1);
+    const wallHeight = 10;
+    const yOffset = 1;
+    const depth = 8;
+
+    const backWall = BABYLON.MeshBuilder.CreatePlane('backWall', { width: 16, height: wallHeight }, this.scene);
+    backWall.position = new BABYLON.Vector3(0, wallHeight / 2 + yOffset, depth + 0.01);
 
     const wallMat = new BABYLON.StandardMaterial('wallMat', this.scene);
     wallMat.diffuseColor = this.wallColor ?? getSceneWallColor();
     wallMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
+    wallMat.backFaceCulling = false;
 
     backWall.material = wallMat;
     this.registerWallMaterial(wallMat);
 
-    this.createBoxWalls({ width: 16, height: 10, depth: 8, yOffset: 1 });
+    this.createBoxWalls({ width: 16, height: wallHeight, depth, yOffset });
   }
 
   dispose() {

@@ -146,11 +146,12 @@ export class CustomScene extends BaseScene {
         { width: 16, height: display.wallHeight },
         this.scene
       );
-      backWall.position = new BABYLON.Vector3(0, 2 + display.wallHeight / 2, gridZ + 0.1);
+      backWall.position = new BABYLON.Vector3(0, 2 + display.wallHeight / 2, gridZ + 0.01);
 
       const wallMat = new BABYLON.StandardMaterial('wallMat', this.scene);
       wallMat.diffuseColor = this.wallColor ?? this.hexToColor3(display.wallColor);
       wallMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
+      wallMat.backFaceCulling = false;
       backWall.material = wallMat;
       this.registerWallMaterial(wallMat);
     }

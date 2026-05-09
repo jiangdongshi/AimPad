@@ -77,6 +77,7 @@ export function useTraining() {
   const animFrameRef = useRef<number>(0);
   const pauseTimeRef = useRef<number>(0);
   const elapsedBeforePauseRef = useRef<number>(0);
+  const startTimeRef = useRef<number>(0);
   const currentTaskRef = useRef<TrainingTaskConfig | null>(null);
   const currentCustomTaskRef = useRef<CustomTask | null>(null);
 
@@ -162,8 +163,8 @@ export function useTraining() {
       await scene.setup();
       scene.start();
 
-      const startTime = performance.now();
-      let lastTime = startTime;
+      startTimeRef.current = performance.now();
+      let lastTime = startTimeRef.current;
       let fpsUpdateCounter = 0;
       let lastStateSync = 0;
       let lastTimeRemaining = -1;
@@ -179,7 +180,7 @@ export function useTraining() {
         const stats = scene.getStats();
 
         // 计算剩余时间（一次计算，状态同步 + 结束检测共用）
-        const elapsed = now - startTime + elapsedBeforePauseRef.current;
+        const elapsed = now - startTimeRef.current + elapsedBeforePauseRef.current;
         const duration = taskDurations[task.id] ?? task.duration;
         const remaining = duration > 0 ? Math.max(0, duration - elapsed) : -1;
         const displayTime = duration > 0 ? Math.ceil(remaining / 1000) : -1;
@@ -248,6 +249,7 @@ export function useTraining() {
   const pauseTraining = useCallback(() => {
     if (status === 'playing') {
       pauseTimeRef.current = performance.now();
+      elapsedBeforePauseRef.current += pauseTimeRef.current - startTimeRef.current;
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = 0;
@@ -259,10 +261,9 @@ export function useTraining() {
 
   const resumeTraining = useCallback(() => {
     if (status === 'paused' && currentTask && sceneRef.current) {
-      const pauseDuration = performance.now() - pauseTimeRef.current;
-      elapsedBeforePauseRef.current += pauseDuration;
+      startTimeRef.current = performance.now();
 
-      let lastTime = performance.now();
+      let lastTime = startTimeRef.current;
       let fpsUpdateCounter = 0;
       let lastStateSync = 0;
       let lastTimeRemaining = useGameStore.getState().timeRemaining;
@@ -278,7 +279,7 @@ export function useTraining() {
 
         const stats = scene.getStats();
 
-        const elapsed = now - pauseTimeRef.current + elapsedBeforePauseRef.current;
+        const elapsed = now - startTimeRef.current + elapsedBeforePauseRef.current;
         const duration = taskDurations[currentTask.id] ?? currentTask.duration;
         const remaining = duration > 0 ? Math.max(0, duration - elapsed) : -1;
         const displayTime = duration > 0 ? Math.ceil(remaining / 1000) : -1;
@@ -349,8 +350,8 @@ export function useTraining() {
       await scene.setup();
       scene.start();
 
-      const startTime = performance.now();
-      let lastTime = startTime;
+      startTimeRef.current = performance.now();
+      let lastTime = startTimeRef.current;
       let fpsUpdateCounter = 0;
       let lastStateSync = 0;
       let lastTimeRemaining = -1;
@@ -366,7 +367,7 @@ export function useTraining() {
         const stats = scene.getStats();
 
         const duration = task.duration || 0;
-        const elapsed = now - startTime + elapsedBeforePauseRef.current;
+        const elapsed = now - startTimeRef.current + elapsedBeforePauseRef.current;
         const remaining = duration > 0 ? Math.max(0, duration - elapsed) : -1;
         const displayTime = duration > 0 ? Math.ceil(remaining / 1000) : -1;
 

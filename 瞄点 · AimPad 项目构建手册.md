@@ -2436,7 +2436,102 @@ docker compose down
 
 ---
 
-**文档版本**：v3.1
+**文档版本**：v3.2
+
+---
+
+## 附录 G：近期修复与改进（2026-05-09）
+
+### G.1 场景墙壁颜色换色修复
+
+**问题描述**：训练进行中调整"场景墙壁颜色"设置时，只有正面 canvas（backWall）和地面响应颜色变化。左墙、右墙、天花板、背面墙壁显示为白色，无法改色。
+
+**根因分析**：`BaseScene.createBoxWalls()` 使用的 `CreateBox` + `MultiMaterial` + `SubMesh` 方案中，6 个 SubMesh 的面索引映射错误。
+
+Babylon.js `CreateBox` 的实际面顺序：
+
+| SubMesh 索引 | 面 | 法线方向 |
+|---|---|---|
+| 0 | Front | +Z |
+| 1 | Back | -Z |
+| 2 | Right | +X |
+| 3 | Left | -X |
+| 4 | Top | +Y |
+| 5 | Bottom | -Y |
+
+原代码将材质按错误顺序排列（假设 0=底、1=右、2=后、3=左、4=顶、5=前），导致材质贴到错误的面，大量墙面显示为未着色的白色。
+
+**修复方案**：放弃 `MultiMaterial` + `SubMesh` 逐面材质方案，改为**单材质 `CreateBox`**：
+
+```typescript
+// BaseScene.createBoxWalls() —— 单材质盒子方案
+const roomMat = new BABYLON.StandardMaterial('roomMat', this.scene);
+roomMat.diffuseColor = wallColor;
+roomMat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
+roomMat.backFaceCulling = false;  // 从内部可见
+
+const box = BABYLON.MeshBuilder.CreateBox('roomBox',
+  { width, height: height + 2, depth: 18 },  // depth=18 → z∈[-10,8]
+  this.scene
+);
+box.position = new BABYLON.Vector3(0, height / 2, -1);
+box.material = roomMat;
+```
+
+**同时修正的几何问题**：
+- 盒子 z 范围 [-10, 8]：相机 z=-8 在盒子内部 2 单位，背后有完整墙壁（之前 `depth=8` 时盒子仅 z∈[0,8]，相机后方无墙壁）
+- 盒子 y 范围 [0, height+2]：墙壁从地面开始，消除地面-墙壁缝隙（之前 `yOffset=2` 造成底部 2 单位缝隙）
+- 所有材质 `backFaceCulling = false`：从盒子内部各个方向都可见
+- 子类 `backWall`（z=8.01）与盒子前面（z=8）对齐，颜色相同，无视觉接缝
+
+**受影响的文件**：
+
+| 文件 | 修改内容 |
+|------|----------|
+| `src/game/scenes/BaseScene.ts` | 重写 `createBoxWalls()`，精简 `WALL_MAT_NAMES` 和 `applyWallColorToAll()` |
+| `src/game/scenes/GridshotScene.ts` | backWall 加 `backFaceCulling = false`，z 位置对齐 |
+| `src/game/scenes/SphereTrackScene.ts` | backWall 加 `backFaceCulling = false` |
+| `src/game/scenes/CustomScene.ts` | backWall 加 `backFaceCulling = false` |
+
+### G.2 暂停倒计时修复
+
+**问题描述**：训练进行中按 ESC 暂停，倒计时继续走动而非停止。
+
+**根因分析**：`useTraining.ts` 中暂停/恢复的时间追踪逻辑存在两个关联 bug：
+
+1. `pauseTraining()` 取消 renderLoop 时**未保存当前已用时间**到 `elapsedBeforePauseRef`（值为 0）
+2. `resumeTraining()` 将暂停时长 `pauseDuration` 加到 `elapsedBeforePauseRef`，但 renderLoop 公式 `now - pauseTimeRef + elapsedBeforePauseRef` 中 `now - pauseTimeRef` 已包含暂停时长——**暂停时长被重复计入**
+
+```typescript
+// 修复前 — bug 代码
+elapsedBeforePauseRef.current += pauseDuration;  // 错误：又加了一遍暂停时长
+const elapsed = now - pauseTimeRef.current + elapsedBeforePauseRef.current;
+```
+
+**修复方案**：新增 `startTimeRef` 跨函数共享，修正三段式时间追踪：
+
+```typescript
+// pauseTraining: 暂停时，保存本段已用时间
+elapsedBeforePauseRef.current += performance.now() - startTimeRef.current;
+
+// resumeTraining: 重置开始时间，不累加暂停时长
+startTimeRef.current = performance.now();
+
+// 所有 renderLoop 统一公式
+const elapsed = now - startTimeRef.current + elapsedBeforePauseRef.current;
+//              \____本段已用时间____/   \____之前累计已用时间____/
+//              = 总活跃时间（暂停时间不计入）
+```
+
+**受影响的文件**：
+
+| 文件 | 修改内容 |
+|------|----------|
+| `src/hooks/useTraining.ts` | 新增 `startTimeRef`，修正 `pauseTraining`、`resumeTraining`、`startTraining`、`startCustomTraining` 的时间公式 |
+
+### G.3 暂停延展问题修复
+
+- 暂停后再恢复训练时，如果经过较长时间暂停，倒计时不会加速或跳变，恢复后从暂停时的剩余时间继续计数
 **最后更新**：2026-05-06
 **维护者**：@jiangdongshi
 **项目仓库**：https://github.com/jiangdongshi/AimPad
