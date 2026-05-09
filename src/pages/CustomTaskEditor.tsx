@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -14,49 +14,51 @@ import type {
 } from '@/types/customTask';
 import { createDefaultSceneConfig } from '@/types/customTask';
 
-const TARGET_SHAPES: { value: TargetShape; label: string }[] = [
-  { value: 'sphere', label: 'Sphere' },
-  { value: 'cube', label: 'Cube' },
-  { value: 'cylinder', label: 'Cylinder' },
-  { value: 'flat', label: 'Flat' },
-];
-
-const MOVEMENT_TYPES: { value: MovementType; label: string; desc: string }[] = [
-  { value: 'static', label: 'Static', desc: 'Targets stay in place' },
-  { value: 'circular', label: 'Circular', desc: 'Targets move in a circle' },
-  { value: 'linear', label: 'Linear', desc: 'Targets move back and forth' },
-  { value: 'sine', label: 'Sine Wave', desc: 'Targets follow sine wave' },
-  { value: 'random', label: 'Random', desc: 'Targets move randomly' },
-  { value: 'figure8', label: 'Figure 8', desc: 'Targets follow figure-8 path' },
-];
-
-const SPAWN_MODES: { value: SpawnMode; label: string; desc: string }[] = [
-  { value: 'interval', label: 'Interval', desc: 'Spawn at fixed intervals' },
-  { value: 'continuous', label: 'Continuous', desc: 'Always one target active' },
-  { value: 'burst', label: 'Burst', desc: 'Spawn multiple at once' },
-];
-
-const TASK_CATEGORIES: { value: TaskCategory; label: string }[] = [
-  { value: 'static-clicking', label: 'Static Clicking' },
-  { value: 'dynamic-clicking', label: 'Dynamic Clicking' },
-  { value: 'tracking', label: 'Tracking' },
-  { value: 'target-switching', label: 'Target Switching' },
-  { value: 'reaction', label: 'Reaction' },
-];
-
-const DURATION_OPTIONS = [
-  { value: 30000, label: '30s' },
-  { value: 45000, label: '45s' },
-  { value: 60000, label: '60s' },
-  { value: 0, label: 'Unlimited' },
-];
-
 export function CustomTaskEditor() {
   const navigate = useNavigate();
   const locale = useLocale();
   const { addTask, importFromShareCode } = useCustomTaskStore();
+  const configRef = useRef<SceneConfig>(createDefaultSceneConfig());
+
+  const TARGET_SHAPES: { value: TargetShape; label: string }[] = [
+    { value: 'sphere', label: locale['custom.shape.sphere'] },
+    { value: 'cube', label: locale['custom.shape.cube'] },
+    { value: 'cylinder', label: locale['custom.shape.cylinder'] },
+    { value: 'flat', label: locale['custom.shape.flat'] },
+  ];
+
+  const MOVEMENT_TYPES: { value: MovementType; label: string; desc: string }[] = [
+    { value: 'static', label: locale['custom.mt.static'], desc: locale['custom.mt.static.desc'] },
+    { value: 'circular', label: locale['custom.mt.circular'], desc: locale['custom.mt.circular.desc'] },
+    { value: 'linear', label: locale['custom.mt.linear'], desc: locale['custom.mt.linear.desc'] },
+    { value: 'sine', label: locale['custom.mt.sine'], desc: locale['custom.mt.sine.desc'] },
+    { value: 'random', label: locale['custom.mt.random'], desc: locale['custom.mt.random.desc'] },
+    { value: 'figure8', label: locale['custom.mt.figure8'], desc: locale['custom.mt.figure8.desc'] },
+  ];
+
+  const SPAWN_MODES: { value: SpawnMode; label: string; desc: string }[] = [
+    { value: 'interval', label: locale['custom.spawn.interval'], desc: locale['custom.spawn.interval.desc'] },
+    { value: 'continuous', label: locale['custom.spawn.continuous'], desc: locale['custom.spawn.continuous.desc'] },
+    { value: 'burst', label: locale['custom.spawn.burst'], desc: locale['custom.spawn.burst.desc'] },
+  ];
+
+  const TASK_CATEGORIES: { value: TaskCategory; label: string }[] = [
+    { value: 'static-clicking', label: locale['taskType.static-clicking'] },
+    { value: 'dynamic-clicking', label: locale['taskType.dynamic-clicking'] },
+    { value: 'tracking', label: locale['taskType.tracking'] },
+    { value: 'target-switching', label: locale['taskType.target-switching'] },
+    { value: 'reaction', label: locale['taskType.reaction'] },
+  ];
+
+  const DURATION_OPTIONS = [
+    { value: 30000, label: locale['training.duration.30s'] },
+    { value: 45000, label: locale['training.duration.45s'] },
+    { value: 60000, label: locale['training.duration.60s'] },
+    { value: 0, label: locale['training.duration.unlimited'] },
+  ];
 
   const [config, setConfig] = useState<SceneConfig>(createDefaultSceneConfig());
+  configRef.current = config;
   const [importCode, setImportCode] = useState('');
   const [shareCode, setShareCode] = useState('');
   const [copied, setCopied] = useState(false);
@@ -103,10 +105,10 @@ export function CustomTaskEditor() {
   }, []);
 
   const handleGenerateCode = useCallback(() => {
-    const code = encodeShareCode(config);
+    const code = encodeShareCode(configRef.current);
     setShareCode(code);
     setCopied(false);
-  }, [config]);
+  }, []);
 
   const handleCopyCode = useCallback(() => {
     if (shareCode) {
@@ -129,13 +131,13 @@ export function CustomTaskEditor() {
   const handleImport = useCallback(() => {
     setImportError('');
     if (!importCode.trim()) {
-      setImportError('Please enter a share code');
+      setImportError(locale['custom.importError.empty']);
       return;
     }
 
     const decoded = decodeShareCode(importCode.trim());
     if (!decoded) {
-      setImportError('Invalid share code');
+      setImportError(locale['custom.importError.invalid']);
       return;
     }
 
@@ -143,7 +145,7 @@ export function CustomTaskEditor() {
     if (task) {
       navigate(`/training?custom=${task.id}`);
     } else {
-      setImportError('Failed to import task');
+      setImportError(locale['custom.importError.failed']);
     }
   }, [importCode, importFromShareCode, navigate]);
 
@@ -239,9 +241,8 @@ export function CustomTaskEditor() {
                     setImportCode(e.target.value);
                     setImportError('');
                   }}
-                  placeholder={locale['custom.shareCodePlaceholder'] || 'Enter 16-character share code'}
+                  placeholder={locale['custom.shareCodePlaceholder'] || 'Enter share code'}
                   style={inputStyle}
-                  maxLength={16}
                 />
                 {importError && (
                   <p className="text-sm mt-2" style={{ color: '#ef4444' }}>{importError}</p>
@@ -493,7 +494,7 @@ export function CustomTaskEditor() {
                 </div>
                 <div>
                   <label style={labelStyle}>
-                    {locale['custom.lifetime'] || 'Target Lifetime'}: {config.spawn.lifetime === 0 ? 'Unlimited' : `${config.spawn.lifetime}ms`}
+                    {locale['custom.lifetime'] || 'Target Lifetime'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}
                   </label>
                   <input
                     type="range"
@@ -623,29 +624,29 @@ export function CustomTaskEditor() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="text-sm">
-                  <span className="text-text-muted">Name: </span>
-                  <span className="text-text-primary font-medium">{config.name || 'Untitled'}</span>
+                  <span className="text-text-muted">{locale['custom.preview.name']}: </span>
+                  <span className="text-text-primary font-medium">{config.name || locale['custom.preview.untitled']}</span>
                 </div>
                 <div className="text-sm">
-                  <span className="text-text-muted">Category: </span>
-                  <span className="text-text-primary">{config.category}</span>
+                  <span className="text-text-muted">{locale['custom.preview.category']}: </span>
+                  <span className="text-text-primary">{locale[`taskType.${config.category}` as keyof typeof locale] || config.category}</span>
                 </div>
                 <div className="text-sm">
-                  <span className="text-text-muted">Movement: </span>
-                  <span className="text-text-primary">{config.movement.type}</span>
+                  <span className="text-text-muted">{locale['custom.preview.movement']}: </span>
+                  <span className="text-text-primary">{locale[`custom.mt.${config.movement.type}` as keyof typeof locale] || config.movement.type}</span>
                 </div>
                 <div className="text-sm">
-                  <span className="text-text-muted">Targets: </span>
-                  <span className="text-text-primary">{config.spawn.maxActive} active</span>
+                  <span className="text-text-muted">{locale['custom.preview.targets']}: </span>
+                  <span className="text-text-primary">{config.spawn.maxActive} {locale['custom.preview.active']}</span>
                 </div>
                 <div className="text-sm">
-                  <span className="text-text-muted">Duration: </span>
+                  <span className="text-text-muted">{locale['custom.preview.duration']}: </span>
                   <span className="text-text-primary">
-                    {config.duration === 0 ? 'Unlimited' : `${config.duration / 1000}s`}
+                    {config.duration === 0 ? locale['training.duration.unlimited'] : `${config.duration / 1000}s`}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-text-muted">Color: </span>
+                  <span className="text-text-muted">{locale['custom.preview.color']}: </span>
                   <span
                     className="inline-block w-4 h-4 rounded-full"
                     style={{ backgroundColor: config.target.color, border: '1px solid var(--color-border)' }}
@@ -667,12 +668,12 @@ export function CustomTaskEditor() {
                 {shareCode && (
                   <>
                     <div
-                      className="text-center py-3 px-4 rounded-lg font-mono text-lg tracking-wider"
+                      className="py-3 px-4 rounded-lg font-mono text-xs break-all"
                       style={{
                         backgroundColor: 'var(--color-bg-surface-hover)',
                         border: '1px solid var(--color-border)',
                         color: '#2563EB',
-                        letterSpacing: '0.15em',
+                        wordBreak: 'break-all',
                       }}
                     >
                       {formatShareCode(shareCode)}
@@ -686,19 +687,21 @@ export function CustomTaskEditor() {
             </Card>
 
             {/* Action Buttons */}
-            <div className="space-y-3">
-              <Button
-                variant="primary"
-                className="w-full"
-                onClick={handleSave}
-                disabled={!config.name.trim()}
-              >
-                {locale['custom.saveAndStart'] || 'Save & Start Training'}
-              </Button>
-              <Button variant="ghost" className="w-full" onClick={handleReset}>
-                {locale['custom.reset'] || 'Reset to Default'}
-              </Button>
-            </div>
+            <Card>
+              <CardContent className="space-y-3">
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  onClick={handleSave}
+                  disabled={!config.name.trim()}
+                >
+                  {locale['custom.saveAndStart'] || 'Save & Start Training'}
+                </Button>
+                <Button variant="ghost" className="w-full" onClick={handleReset}>
+                  {locale['custom.reset'] || 'Reset to Default'}
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}

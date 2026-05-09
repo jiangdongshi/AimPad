@@ -52,7 +52,7 @@ export function ForgotPassword() {
     setLocalError('');
 
     if (password.length < 6) {
-      setLocalError(locale['auth.passwordTooShort'] || '密码至少需要 6 个字符');
+      setLocalError(locale['auth.passwordTooShort']);
       return;
     }
     if (password !== confirmPassword) {

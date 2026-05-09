@@ -29,6 +29,7 @@ export interface TrainingTaskConfig {
   name: string;
   type: TaskType;
   description: string;
+  descriptionEn: string;
   difficulty: Difficulty;
   duration: number; // 毫秒
   parameters: TaskParameters;
@@ -80,6 +81,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     name: 'Gridshot',
     type: 'static-clicking',
     description: '快速点击网格中的固定目标，训练基础定位能力',
+    descriptionEn: 'Quickly click fixed targets in a grid to train basic aiming',
     difficulty: 'beginner',
     duration: 30000,
     parameters: {
@@ -101,6 +103,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     name: 'Spidershot',
     type: 'static-clicking',
     description: '从中心向四周快速射击目标，训练大范围定位',
+    descriptionEn: 'Quickly shoot targets outward from center to train wide-range aiming',
     difficulty: 'beginner',
     duration: 30000,
     parameters: {
@@ -122,6 +125,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     name: 'SphereTrack',
     type: 'tracking',
     description: '持续追踪移动中的球体，训练跟枪平滑度',
+    descriptionEn: 'Continuously track a moving sphere to improve tracking smoothness',
     difficulty: 'intermediate',
     duration: 30000,
     parameters: {
@@ -143,6 +147,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     name: 'StrafeTrack',
     type: 'tracking',
     description: '追踪左右移动的目标，模拟实战跟枪',
+    descriptionEn: 'Track a horizontally moving target to simulate real combat tracking',
     difficulty: 'intermediate',
     duration: 30000,
     parameters: {
@@ -164,6 +169,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     name: 'TargetSwitch',
     type: 'target-switching',
     description: '在多个目标间快速切换，训练目标切换能力',
+    descriptionEn: 'Quickly switch between multiple targets to train target switching',
     difficulty: 'intermediate',
     duration: 30000,
     parameters: {
@@ -185,6 +191,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     name: 'ReflexShot',
     type: 'reaction',
     description: '目标随机出现并快速消失，训练反应速度',
+    descriptionEn: 'Targets appear randomly and disappear quickly to train reaction speed',
     difficulty: 'advanced',
     duration: 30000,
     parameters: {
