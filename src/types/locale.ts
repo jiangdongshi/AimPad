@@ -96,6 +96,12 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'stats.noData': 'No data available. Start training to see your stats!',
     'stats.noRecentScores': 'No recent scores',
     'stats.noTaskData': 'No task data available',
+    'stats.category.all': 'All',
+    'stats.category.preset': 'Preset',
+    'stats.category.custom': 'Custom',
+    'stats.prev': 'Prev',
+    'stats.next': 'Next',
+    'stats.page': 'Page {current} / {total}',
     'stats.loading': 'Loading...',
     'stats.table.task': 'Task',
     'stats.table.sessions': 'Sessions',
@@ -350,6 +356,12 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'training.deleteConfirm': '确定删除此任务？',
     'training.noFavorites': '暂无收藏',
     'training.noCustom': '暂无自定义任务',
+    'task.gridshot': '网格射击',
+    'task.spidershot': '蜘蛛射击',
+    'task.sphere-track': '球体追踪',
+    'task.strafe-track': '平移追踪',
+    'task.target-switch': '目标切换',
+    'task.reflex-shot': '反射射击',
 
     // Training Result
     'result.title': '训练完成',
@@ -385,6 +397,12 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'stats.noData': '暂无数据，开始训练以查看统计！',
     'stats.noRecentScores': '暂无近期得分',
     'stats.noTaskData': '暂无任务数据',
+    'stats.category.all': '全部',
+    'stats.category.preset': '预设',
+    'stats.category.custom': '自定义',
+    'stats.prev': '上一页',
+    'stats.next': '下一页',
+    'stats.page': '第 {current} / {total} 页',
     'stats.loading': '加载中...',
     'stats.table.task': '任务',
     'stats.table.sessions': '训练次数',
@@ -447,14 +465,6 @@ export const LOCALES: Record<LocaleId, Record<string, string>> = {
     'taskType.tracking': '追踪',
     'taskType.target-switching': '目标切换',
     'taskType.reaction': '反应',
-
-    // Task names
-    'task.gridshot': '网格射击',
-    'task.spidershot': '蜘蛛射击',
-    'task.sphere-track': '球体追踪',
-    'task.strafe-track': '移动追踪',
-    'task.target-switch': '目标切换',
-    'task.reflex-shot': '反射射击',
 
     // Auth
     'auth.login': '登录',
