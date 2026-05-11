@@ -445,7 +445,7 @@ export function Training() {
             {activeTab === 'preset' && TRAINING_TASKS.map((task) => (
               <Card key={task.id} hoverable className="h-full">
                 <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-xl font-gaming text-text-primary">{task.name}</h3>
+                  <h3 className="text-xl font-gaming text-text-primary">{locale[`task.${task.id}` as keyof typeof locale] || task.name}</h3>
                   <div className="flex items-center gap-2">
                     <span className={`
                       px-2.5 py-1 rounded-full text-xs font-medium
@@ -559,10 +559,11 @@ export function Training() {
               if (!task) return null;
 
               const isPreset = !!presetTask;
+              const displayName = isPreset ? (locale[`task.${favId}` as keyof typeof locale] || task.name) : task.name;
               return (
                 <Card key={favId} hoverable className="h-full">
                   <div className="flex items-start justify-between mb-4">
-                    <h3 className="text-xl font-gaming text-text-primary">{task.name}</h3>
+                    <h3 className="text-xl font-gaming text-text-primary">{displayName}</h3>
                     <div className="flex items-center gap-2">
                       {isPreset ? (
                         <span className={`

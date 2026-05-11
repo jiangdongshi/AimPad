@@ -127,11 +127,19 @@ export function useTraining() {
         });
         break;
       case 'sphere-track':
+        scene = new SphereTrackScene(engine, {
+          targetSize: task.parameters.targetSize,
+          targetSpeed: task.parameters.targetSpeed,
+          duration,
+          movementType: 'orbital',
+        });
+        break;
       case 'strafe-track':
         scene = new SphereTrackScene(engine, {
           targetSize: task.parameters.targetSize,
           targetSpeed: task.parameters.targetSpeed,
           duration,
+          movementType: 'linear',
         });
         break;
       default:

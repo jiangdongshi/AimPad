@@ -160,7 +160,7 @@ export class CustomScene extends BaseScene {
       width: 16,
       height: display.wallHeight,
       depth: 8,
-      yOffset: 2,
+      yOffset: 1,
     });
   }
 
@@ -326,7 +326,7 @@ export class CustomScene extends BaseScene {
 
   private spawnRandomTarget() {
     const { type } = this.config.movement;
-    const bounds = this.config.movement.bounds || { xMin: -5, xMax: 5, yMin: 3, yMax: 8 };
+    const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
     const display = this.config.display;
 
     let position: BABYLON.Vector3;
