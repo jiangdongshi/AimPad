@@ -4,7 +4,7 @@ import { Header } from './Header';
 export function Layout() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const isInTraining = location.pathname === '/training' && searchParams.has('task');
+  const isInTraining = location.pathname === '/training' && (searchParams.has('task') || searchParams.has('custom'));
 
   return (
     <div className="min-h-screen bg-surface-900">

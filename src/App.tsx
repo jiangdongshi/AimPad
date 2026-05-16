@@ -10,6 +10,7 @@ import { Register } from '@/pages/Register';
 import { ForgotPassword } from '@/pages/ForgotPassword';
 import { Gamepad } from '@/pages/Gamepad';
 import { CustomTaskEditor } from '@/pages/CustomTaskEditor';
+import { Admin } from '@/pages/Admin';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -37,6 +38,7 @@ function AppInner() {
           <Route path="forgot-password" element={<ForgotPassword />} />
           <Route path="gamepad" element={<Gamepad />} />
           <Route path="custom-task" element={<CustomTaskEditor />} />
+          <Route path="admin" element={<Admin />} />
         </Route>
       </Routes>
     </Router>

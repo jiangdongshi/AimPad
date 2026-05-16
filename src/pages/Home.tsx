@@ -69,15 +69,6 @@ export function Home() {
               <Card hoverable className="h-full">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="font-gaming text-text-primary">{locale[`task.${task.id}` as keyof typeof locale] || task.name}</h3>
-                  <span className={`
-                    px-2 py-1 rounded text-xs font-medium
-                    ${task.difficulty === 'beginner' ? 'bg-success/20 text-success' :
-                      task.difficulty === 'intermediate' ? 'bg-warning/20 text-warning' :
-                      task.difficulty === 'advanced' ? 'bg-danger/20 text-danger' :
-                      'bg-primary-500/20 text-primary-400'}
-                  `}>
-                    {locale[`difficulty.${task.difficulty}` as keyof typeof locale]}
-                  </span>
                 </div>
                 <p className="text-sm text-text-secondary">{isZh ? task.description : task.descriptionEn}</p>
                 <div className="mt-3 flex items-center gap-2 text-xs text-text-muted">

@@ -5,32 +5,12 @@ export type TaskType =
   | 'target-switching'
   | 'reaction';
 
-export type Difficulty = 'beginner' | 'intermediate' | 'advanced' | 'expert';
-
-// 游戏难度（暂停界面可调节）
-export type GameDifficulty = 'easy' | 'simple' | 'normal' | 'hard' | 'hell';
-
-export interface GameDifficultyConfig {
-  label: string;           // 显示名称（locale key）
-  targetSizeMultiplier: number; // 目标大小倍率
-  targetLifetime: number;  // 目标存活时间（ms），0 表示无限制
-}
-
-export const GAME_DIFFICULTY_CONFIG: Record<GameDifficulty, GameDifficultyConfig> = {
-  easy:   { label: 'difficulty.easy',   targetSizeMultiplier: 1.5, targetLifetime: 0 },
-  simple: { label: 'difficulty.simple', targetSizeMultiplier: 1.0, targetLifetime: 0 },
-  normal: { label: 'difficulty.normal', targetSizeMultiplier: 0.7, targetLifetime: 0 },
-  hard:   { label: 'difficulty.hard',   targetSizeMultiplier: 0.5, targetLifetime: 2000 },
-  hell:   { label: 'difficulty.hell',   targetSizeMultiplier: 0.3, targetLifetime: 1200 },
-};
-
 export interface TrainingTaskConfig {
   id: string;
   name: string;
   type: TaskType;
   description: string;
   descriptionEn: string;
-  difficulty: Difficulty;
   duration: number; // 毫秒
   parameters: TaskParameters;
   scoring: ScoringWeights;
@@ -82,7 +62,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     type: 'static-clicking',
     description: '快速点击网格中的固定目标，训练基础定位能力',
     descriptionEn: 'Quickly click fixed targets in a grid to train basic aiming',
-    difficulty: 'beginner',
+
     duration: 30000,
     parameters: {
       targetCount: 3,
@@ -104,7 +84,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     type: 'static-clicking',
     description: '从中心向四周快速射击目标，训练大范围定位',
     descriptionEn: 'Quickly shoot targets outward from center to train wide-range aiming',
-    difficulty: 'beginner',
+
     duration: 30000,
     parameters: {
       targetCount: 1,
@@ -126,7 +106,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     type: 'tracking',
     description: '持续追踪移动中的球体，训练跟枪平滑度',
     descriptionEn: 'Continuously track a moving sphere to improve tracking smoothness',
-    difficulty: 'intermediate',
+
     duration: 30000,
     parameters: {
       targetCount: 1,
@@ -148,7 +128,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     type: 'tracking',
     description: '追踪左右移动的目标，模拟实战跟枪',
     descriptionEn: 'Track a horizontally moving target to simulate real combat tracking',
-    difficulty: 'intermediate',
+
     duration: 30000,
     parameters: {
       targetCount: 1,
@@ -170,7 +150,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     type: 'target-switching',
     description: '在多个目标间快速切换，训练目标切换能力',
     descriptionEn: 'Quickly switch between multiple targets to train target switching',
-    difficulty: 'intermediate',
+
     duration: 30000,
     parameters: {
       targetCount: 5,
@@ -192,7 +172,7 @@ export const TRAINING_TASKS: TrainingTaskConfig[] = [
     type: 'reaction',
     description: '目标随机出现并快速消失，训练反应速度',
     descriptionEn: 'Targets appear randomly and disappear quickly to train reaction speed',
-    difficulty: 'advanced',
+
     duration: 30000,
     parameters: {
       targetCount: 1,

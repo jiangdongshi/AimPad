@@ -55,8 +55,6 @@ export class GridshotScene extends BaseScene {
 
     const now = performance.now();
 
-    this.checkExpiredTargets();
-
     // 检测场上活跃目标数量（removeTarget 已同步从数组移除，length 即活跃数）
     const missingCount = this.config.targetCount - this.targets.length;
 
@@ -95,7 +93,7 @@ export class GridshotScene extends BaseScene {
     const y = (row + 0.5) * cellHeight + 2;
     const z = 8;
 
-    const mesh = this.spawnTarget(new BABYLON.Vector3(x, y, z), targetSize * this.targetSizeMultiplier);
+    const mesh = this.spawnTarget(new BABYLON.Vector3(x, y, z), targetSize);
     const cellKey = `${row},${col}`;
     mesh.metadata = { ...mesh.metadata, cellKey };
     this.occupiedCells.set(cellKey, mesh);
@@ -123,29 +121,6 @@ export class GridshotScene extends BaseScene {
       this.occupiedCells.delete(cellKey);
     }
     super.onTargetHit(mesh);
-  }
-
-  protected checkExpiredTargets() {
-    if (this.targetLifetime <= 0) return;
-
-    const now = performance.now();
-    const expired: BABYLON.Mesh[] = [];
-
-    for (const target of this.targets) {
-      const spawnTime = target.metadata?.spawnTime || 0;
-      if (spawnTime > 0 && now - spawnTime > this.targetLifetime) {
-        expired.push(target);
-      }
-    }
-
-    for (const target of expired) {
-      const cellKey = target.metadata?.cellKey as string | undefined;
-      if (cellKey) {
-        this.occupiedCells.delete(cellKey);
-      }
-      this.misses++;
-      this.removeTarget(target);
-    }
   }
 
   private createGridLines() {

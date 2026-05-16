@@ -4,6 +4,7 @@ export interface User {
   username: string;
   nickname: string | null;
   avatarUrl: string | null;
+  role: string;
   createdAt?: string;
 }
 

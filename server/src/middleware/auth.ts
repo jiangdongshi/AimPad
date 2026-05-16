@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 
 export interface AuthRequest extends Request {
-  user?: { id: number; email: string; username: string };
+  user?: { id: number; email: string; username: string; role: string };
 }
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
@@ -17,10 +17,18 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
       id: number;
       email: string;
       username: string;
+      role: string;
     };
     req.user = payload;
     next();
   } catch {
     return res.status(401).json({ error: '令牌无效或已过期' });
   }
+}
+
+export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  next();
 }

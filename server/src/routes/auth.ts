@@ -113,14 +113,14 @@ authRouter.post('/register', async (req: AuthRequest, res: Response) => {
     // 签发 JWT
     const signOptions: SignOptions = { expiresIn: config.JWT_EXPIRES_IN as SignOptions['expiresIn'] };
     const token = jwt.sign(
-      { id: userId, email, username },
+      { id: userId, email, username, role: 'user' },
       config.JWT_SECRET,
       signOptions
     );
 
     res.json({
       token,
-      user: { id: userId, email, username, nickname: null, avatarUrl: null },
+      user: { id: userId, email, username, nickname: null, avatarUrl: null, role: 'user' },
     });
   } catch (err) {
     console.error('[register error]', err);
@@ -146,7 +146,7 @@ authRouter.post('/login', async (req: AuthRequest, res: Response) => {
 
     // 查找用户
     const [users] = await pool.execute<RowDataPacket[]>(
-      'SELECT id, username, nickname, avatar_url FROM users WHERE email = ?',
+      'SELECT id, username, nickname, avatar_url, role FROM users WHERE email = ?',
       [email]
     );
     if (users.length === 0) {
@@ -170,7 +170,7 @@ authRouter.post('/login', async (req: AuthRequest, res: Response) => {
     // 签发 JWT
     const signOptions: SignOptions = { expiresIn: config.JWT_EXPIRES_IN as SignOptions['expiresIn'] };
     const token = jwt.sign(
-      { id: user.id, email, username: user.username },
+      { id: user.id, email, username: user.username, role: user.role || 'user' },
       config.JWT_SECRET,
       signOptions
     );
@@ -183,6 +183,7 @@ authRouter.post('/login', async (req: AuthRequest, res: Response) => {
         username: user.username,
         nickname: user.nickname,
         avatarUrl: user.avatar_url,
+        role: user.role || 'user',
       },
     });
   } catch (err) {
@@ -244,7 +245,7 @@ authRouter.post('/reset-password', async (req: AuthRequest, res: Response) => {
 authRouter.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const [users] = await pool.execute<RowDataPacket[]>(
-      'SELECT id, username, email, nickname, avatar_url, created_at FROM users WHERE id = ?',
+      'SELECT id, username, email, nickname, avatar_url, role, created_at FROM users WHERE id = ?',
       [req.user!.id]
     );
     if (users.length === 0) {
@@ -264,6 +265,7 @@ authRouter.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
         email: user.email,
         nickname: user.nickname,
         avatarUrl: user.avatar_url,
+        role: user.role || 'user',
         createdAt: user.created_at,
       },
       settings: settings[0] || null,

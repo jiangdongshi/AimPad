@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `created_at`     DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '注册时间',
   `updated_at`     DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `last_login_at`  DATETIME         DEFAULT NULL COMMENT '最后登录时间',
+  `role`           VARCHAR(16)      NOT NULL DEFAULT 'user' COMMENT '角色 (user/admin)',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`),
   UNIQUE KEY `uk_email` (`email`)
@@ -63,7 +64,6 @@ CREATE TABLE IF NOT EXISTS `training_tasks` (
   `name_zh`       VARCHAR(64)  DEFAULT NULL COMMENT '任务中文名',
   `type`          VARCHAR(32)  NOT NULL COMMENT '任务类型',
   `description`   VARCHAR(256) DEFAULT NULL COMMENT '任务描述',
-  `difficulty`    VARCHAR(16)  NOT NULL DEFAULT 'beginner' COMMENT '难度',
   `duration`      INT UNSIGNED NOT NULL DEFAULT 30000 COMMENT '训练时长 (ms)',
   `parameters`    JSON         NOT NULL COMMENT '任务参数',
   `scoring`       JSON         NOT NULL COMMENT '评分权重',
@@ -124,19 +124,18 @@ CREATE TABLE IF NOT EXISTS `daily_stats` (
 -- --------------------------------------------
 -- 6. 插入预设训练任务数据
 -- --------------------------------------------
-INSERT INTO `training_tasks` (`id`, `name`, `name_zh`, `type`, `description`, `difficulty`, `duration`, `parameters`, `scoring`) VALUES
-('gridshot',      'Gridshot',      '网格射击',  'static-clicking',    '快速点击网格中的固定目标，训练基础定位能力',        'beginner',      30000, '{"targetCount":3,"targetSize":0.8,"targetSpeed":0,"spawnInterval":800,"minDistance":5,"maxDistance":10}',  '{"weightAccuracy":0.4,"weightSpeed":0.4,"weightConsistency":0.2}'),
-('spidershot',    'Spidershot',    '蜘蛛射击',  'static-clicking',    '从中心向四周快速射击目标，训练大范围定位',          'beginner',      30000, '{"targetCount":1,"targetSize":0.6,"targetSpeed":0,"spawnInterval":1200,"minDistance":3,"maxDistance":12}', '{"weightAccuracy":0.3,"weightSpeed":0.5,"weightConsistency":0.2}'),
-('sphere-track',  'SphereTrack',   '球体追踪',  'tracking',           '持续追踪移动中的球体，训练跟枪平滑度',              'intermediate',  30000, '{"targetCount":1,"targetSize":1.2,"targetSpeed":3,"spawnInterval":0,"minDistance":5,"maxDistance":10}',   '{"weightAccuracy":0.6,"weightSpeed":0.1,"weightConsistency":0.3}'),
-('strafe-track',  'StrafeTrack',   '移动追踪',  'tracking',           '追踪左右移动的目标，模拟实战跟枪',                  'intermediate',  30000, '{"targetCount":1,"targetSize":1.0,"targetSpeed":5,"spawnInterval":0,"minDistance":8,"maxDistance":15}',   '{"weightAccuracy":0.5,"weightSpeed":0.2,"weightConsistency":0.3}'),
-('target-switch', 'TargetSwitch',  '目标切换',  'target-switching',   '在多个目标间快速切换，训练目标切换能力',            'intermediate',  30000, '{"targetCount":5,"targetSize":0.7,"targetSpeed":0,"spawnInterval":500,"minDistance":5,"maxDistance":12}', '{"weightAccuracy":0.3,"weightSpeed":0.5,"weightConsistency":0.2}'),
-('reflex-shot',   'ReflexShot',    '反射射击',  'reaction',           '目标随机出现并快速消失，训练反应速度',              'advanced',      30000, '{"targetCount":1,"targetSize":0.5,"targetSpeed":0,"spawnInterval":2000,"minDistance":5,"maxDistance":15}', '{"weightAccuracy":0.3,"weightSpeed":0.6,"weightConsistency":0.1}')
+INSERT INTO `training_tasks` (`id`, `name`, `name_zh`, `type`, `description`, `duration`, `parameters`, `scoring`) VALUES
+('gridshot',      'Gridshot',      '网格射击',  'static-clicking',    '快速点击网格中的固定目标，训练基础定位能力',        30000, '{"targetCount":3,"targetSize":0.8,"targetSpeed":0,"spawnInterval":800,"minDistance":5,"maxDistance":10}',  '{"weightAccuracy":0.4,"weightSpeed":0.4,"weightConsistency":0.2}'),
+('spidershot',    'Spidershot',    '蜘蛛射击',  'static-clicking',    '从中心向四周快速射击目标，训练大范围定位',          30000, '{"targetCount":1,"targetSize":0.6,"targetSpeed":0,"spawnInterval":1200,"minDistance":3,"maxDistance":12}', '{"weightAccuracy":0.3,"weightSpeed":0.5,"weightConsistency":0.2}'),
+('sphere-track',  'SphereTrack',   '球体追踪',  'tracking',           '持续追踪移动中的球体，训练跟枪平滑度',              30000, '{"targetCount":1,"targetSize":1.2,"targetSpeed":3,"spawnInterval":0,"minDistance":5,"maxDistance":10}',   '{"weightAccuracy":0.6,"weightSpeed":0.1,"weightConsistency":0.3}'),
+('strafe-track',  'StrafeTrack',   '移动追踪',  'tracking',           '追踪左右移动的目标，模拟实战跟枪',                  30000, '{"targetCount":1,"targetSize":1.0,"targetSpeed":5,"spawnInterval":0,"minDistance":8,"maxDistance":15}',   '{"weightAccuracy":0.5,"weightSpeed":0.2,"weightConsistency":0.3}'),
+('target-switch', 'TargetSwitch',  '目标切换',  'target-switching',   '在多个目标间快速切换，训练目标切换能力',            30000, '{"targetCount":5,"targetSize":0.7,"targetSpeed":0,"spawnInterval":500,"minDistance":5,"maxDistance":12}', '{"weightAccuracy":0.3,"weightSpeed":0.5,"weightConsistency":0.2}'),
+('reflex-shot',   'ReflexShot',    '反射射击',  'reaction',           '目标随机出现并快速消失，训练反应速度',              30000, '{"targetCount":1,"targetSize":0.5,"targetSpeed":0,"spawnInterval":2000,"minDistance":5,"maxDistance":15}', '{"weightAccuracy":0.3,"weightSpeed":0.6,"weightConsistency":0.1}')
 ON DUPLICATE KEY UPDATE
   `name`        = VALUES(`name`),
   `name_zh`     = VALUES(`name_zh`),
   `type`        = VALUES(`type`),
   `description` = VALUES(`description`),
-  `difficulty`  = VALUES(`difficulty`),
   `duration`    = VALUES(`duration`),
   `parameters`  = VALUES(`parameters`),
   `scoring`     = VALUES(`scoring`);

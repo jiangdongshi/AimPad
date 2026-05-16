@@ -7,40 +7,83 @@ import { useCustomTaskStore } from '@/stores/customTaskStore';
 import { encodeShareCode, decodeShareCode, formatShareCode } from '@/utils/shareCode';
 import type {
   SceneConfig,
-  TargetShape,
   MovementType,
-  SpawnMode,
   TaskCategory,
+  ScoringWeights,
 } from '@/types/customTask';
 import { createDefaultSceneConfig } from '@/types/customTask';
+
+// 各训练类型的默认配置
+const TYPE_DEFAULTS: Record<TaskCategory, {
+  movement: MovementType;
+  spawnMode: 'interval' | 'continuous';
+  maxActive: number;
+  interval: number;
+  lifetime: number;
+  speed: number;
+  scoring: ScoringWeights;
+}> = {
+  'static-clicking': {
+    movement: 'static',
+    spawnMode: 'interval',
+    maxActive: 3,
+    interval: 800,
+    lifetime: 0,
+    speed: 0,
+    scoring: { weightAccuracy: 0.4, weightSpeed: 0.4, weightConsistency: 0.2 },
+  },
+  'dynamic-clicking': {
+    movement: 'linear',
+    spawnMode: 'interval',
+    maxActive: 3,
+    interval: 800,
+    lifetime: 0,
+    speed: 3,
+    scoring: { weightAccuracy: 0.3, weightSpeed: 0.5, weightConsistency: 0.2 },
+  },
+  'tracking': {
+    movement: 'circular',
+    spawnMode: 'continuous',
+    maxActive: 1,
+    interval: 0,
+    lifetime: 0,
+    speed: 3,
+    scoring: { weightAccuracy: 0.6, weightSpeed: 0.1, weightConsistency: 0.3 },
+  },
+  'target-switching': {
+    movement: 'static',
+    spawnMode: 'interval',
+    maxActive: 5,
+    interval: 500,
+    lifetime: 0,
+    speed: 0,
+    scoring: { weightAccuracy: 0.3, weightSpeed: 0.5, weightConsistency: 0.2 },
+  },
+  'reaction': {
+    movement: 'static',
+    spawnMode: 'interval',
+    maxActive: 1,
+    interval: 2000,
+    lifetime: 1500,
+    speed: 0,
+    scoring: { weightAccuracy: 0.3, weightSpeed: 0.6, weightConsistency: 0.1 },
+  },
+};
+
+// 轨迹形状选项（用于动态点击和跟踪训练）
+const TRACK_MOVEMENT_TYPES: { value: MovementType; label: string }[] = [
+  { value: 'circular', label: '圆形' },
+  { value: 'sine', label: '正弦' },
+  { value: 'figure8', label: '8字' },
+  { value: 'linear', label: '线性' },
+  { value: 'random', label: '随机' },
+];
 
 export function CustomTaskEditor() {
   const navigate = useNavigate();
   const locale = useLocale();
   const { addTask, importFromShareCode } = useCustomTaskStore();
   const configRef = useRef<SceneConfig>(createDefaultSceneConfig());
-
-  const TARGET_SHAPES: { value: TargetShape; label: string }[] = [
-    { value: 'sphere', label: locale['custom.shape.sphere'] },
-    { value: 'cube', label: locale['custom.shape.cube'] },
-    { value: 'cylinder', label: locale['custom.shape.cylinder'] },
-    { value: 'flat', label: locale['custom.shape.flat'] },
-  ];
-
-  const MOVEMENT_TYPES: { value: MovementType; label: string; desc: string }[] = [
-    { value: 'static', label: locale['custom.mt.static'], desc: locale['custom.mt.static.desc'] },
-    { value: 'circular', label: locale['custom.mt.circular'], desc: locale['custom.mt.circular.desc'] },
-    { value: 'linear', label: locale['custom.mt.linear'], desc: locale['custom.mt.linear.desc'] },
-    { value: 'sine', label: locale['custom.mt.sine'], desc: locale['custom.mt.sine.desc'] },
-    { value: 'random', label: locale['custom.mt.random'], desc: locale['custom.mt.random.desc'] },
-    { value: 'figure8', label: locale['custom.mt.figure8'], desc: locale['custom.mt.figure8.desc'] },
-  ];
-
-  const SPAWN_MODES: { value: SpawnMode; label: string; desc: string }[] = [
-    { value: 'interval', label: locale['custom.spawn.interval'], desc: locale['custom.spawn.interval.desc'] },
-    { value: 'continuous', label: locale['custom.spawn.continuous'], desc: locale['custom.spawn.continuous.desc'] },
-    { value: 'burst', label: locale['custom.spawn.burst'], desc: locale['custom.spawn.burst.desc'] },
-  ];
 
   const TASK_CATEGORIES: { value: TaskCategory; label: string }[] = [
     { value: 'static-clicking', label: locale['taskType.static-clicking'] },
@@ -65,6 +108,29 @@ export function CustomTaskEditor() {
   const [importError, setImportError] = useState('');
   const [activeTab, setActiveTab] = useState<'create' | 'import'>('create');
 
+  // 切换训练类型时，自动应用该类型的默认配置
+  const handleCategoryChange = useCallback((category: TaskCategory) => {
+    const defaults = TYPE_DEFAULTS[category];
+    setConfig(prev => ({
+      ...prev,
+      category,
+      movement: {
+        ...prev.movement,
+        type: defaults.movement,
+        speed: defaults.speed,
+        randomness: category === 'tracking' ? 0 : undefined,
+      },
+      spawn: {
+        ...prev.spawn,
+        mode: defaults.spawnMode,
+        maxActive: defaults.maxActive,
+        interval: defaults.interval,
+        lifetime: defaults.lifetime,
+      },
+      scoring: { ...defaults.scoring },
+    }));
+  }, []);
+
   const updateConfig = useCallback((updates: Partial<SceneConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));
   }, []);
@@ -87,13 +153,6 @@ export function CustomTaskEditor() {
     setConfig(prev => ({
       ...prev,
       spawn: { ...prev.spawn, ...updates },
-    }));
-  }, []);
-
-  const updateDisplay = useCallback((updates: Partial<NonNullable<SceneConfig['display']>>) => {
-    setConfig(prev => ({
-      ...prev,
-      display: { ...prev.display!, ...updates },
     }));
   }, []);
 
@@ -124,7 +183,6 @@ export function CustomTaskEditor() {
     const task = addTask(config);
     const code = encodeShareCode(config);
     setShareCode(code);
-    // Navigate to training page with the new task
     navigate(`/training?custom=${task.id}`);
   }, [config, addTask, navigate]);
 
@@ -155,6 +213,7 @@ export function CustomTaskEditor() {
     setCopied(false);
   }, []);
 
+  // 样式常量
   const inputStyle: React.CSSProperties = {
     backgroundColor: 'var(--color-bg-surface-hover)',
     border: '1px solid var(--color-border)',
@@ -183,6 +242,224 @@ export function CustomTaskEditor() {
     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`,
     backgroundRepeat: 'no-repeat',
     backgroundPosition: 'right 10px center',
+  };
+
+  const category = config.category;
+
+  // 渲染各类型专属参数
+  const renderTypeParams = () => {
+    switch (category) {
+      case 'static-clicking':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>{locale['taskType.static-clicking']}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label style={labelStyle}>{locale['custom.targetSize'] || '大小'}: {config.target.size.toFixed(1)}</label>
+                <input type="range" min="0.3" max="2.0" step="0.1" value={config.target.size}
+                  onChange={(e) => updateTarget({ size: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.maxActive'] || '数量'}: {config.spawn.maxActive}</label>
+                <input type="range" min="1" max="10" step="1" value={config.spawn.maxActive}
+                  onChange={(e) => updateSpawn({ maxActive: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label style={labelStyle}>{locale['custom.gridRows'] || '网格行数'}: {config.display?.rows ?? 3}</label>
+                  <input type="range" min="1" max="10" step="1" value={config.display?.rows ?? 3}
+                    onChange={(e) => setConfig(prev => ({ ...prev, display: { ...prev.display!, rows: parseInt(e.target.value) } }))}
+                    className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+                <div>
+                  <label style={labelStyle}>{locale['custom.gridCols'] || '网格列数'}: {config.display?.cols ?? 5}</label>
+                  <input type="range" min="1" max="20" step="1" value={config.display?.cols ?? 5}
+                    onChange={(e) => setConfig(prev => ({ ...prev, display: { ...prev.display!, cols: parseInt(e.target.value) } }))}
+                    className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}</label>
+                <input type="range" min="0" max="5000" step="100" value={config.spawn.lifetime}
+                  onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case 'dynamic-clicking':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>{locale['taskType.dynamic-clicking']}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label style={labelStyle}>{locale['custom.targetSize'] || '大小'}: {config.target.size.toFixed(1)}</label>
+                <input type="range" min="0.3" max="2.0" step="0.1" value={config.target.size}
+                  onChange={(e) => updateTarget({ size: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.speed'] || '速度'}: {config.movement.speed.toFixed(1)}</label>
+                <input type="range" min="1" max="10" step="0.5" value={config.movement.speed}
+                  onChange={(e) => updateMovement({ speed: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.movementType'] || '轨迹'}</label>
+                <div className="flex flex-wrap gap-2">
+                  {TRACK_MOVEMENT_TYPES.filter(mt => mt.value !== 'static').map(mt => (
+                    <button key={mt.value} onClick={() => updateMovement({ type: mt.value })}
+                      className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                      style={{
+                        backgroundColor: config.movement.type === mt.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                        color: config.movement.type === mt.value ? '#2563EB' : 'var(--color-text-secondary)',
+                        border: config.movement.type === mt.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                      }}>
+                      {mt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}</label>
+                <input type="range" min="0" max="5000" step="100" value={config.spawn.lifetime}
+                  onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case 'tracking':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>{locale['taskType.tracking']}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label style={labelStyle}>{locale['custom.targetSize'] || '大小'}: {config.target.size.toFixed(1)}</label>
+                <input type="range" min="0.3" max="2.0" step="0.1" value={config.target.size}
+                  onChange={(e) => updateTarget({ size: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.speed'] || '速度'}: {config.movement.speed.toFixed(1)}</label>
+                <input type="range" min="1" max="10" step="0.5" value={config.movement.speed}
+                  onChange={(e) => updateMovement({ speed: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.movementType'] || '轨迹形状'}</label>
+                <div className="flex flex-wrap gap-2">
+                  {TRACK_MOVEMENT_TYPES.filter(mt => mt.value !== 'static').map(mt => (
+                    <button key={mt.value} onClick={() => updateMovement({ type: mt.value })}
+                      className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                      style={{
+                        backgroundColor: config.movement.type === mt.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                        color: config.movement.type === mt.value ? '#2563EB' : 'var(--color-text-secondary)',
+                        border: config.movement.type === mt.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                      }}>
+                      {mt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.randomness'] || '随机度'}: {config.movement.randomness ?? 0}%</label>
+                <input type="range" min="0" max="100" step="5" value={config.movement.randomness ?? 0}
+                  onChange={(e) => updateMovement({ randomness: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case 'target-switching':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>{locale['taskType.target-switching']}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label style={labelStyle}>{locale['custom.targetSize'] || '大小'}: {config.target.size.toFixed(1)}</label>
+                <input type="range" min="0.3" max="2.0" step="0.1" value={config.target.size}
+                  onChange={(e) => updateTarget({ size: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.maxActive'] || '数量'}: {config.spawn.maxActive}</label>
+                <input type="range" min="1" max="10" step="1" value={config.spawn.maxActive}
+                  onChange={(e) => updateSpawn({ maxActive: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label style={labelStyle}>{locale['custom.gridRows'] || '网格行数'}: {config.display?.rows ?? 3}</label>
+                  <input type="range" min="1" max="10" step="1" value={config.display?.rows ?? 3}
+                    onChange={(e) => setConfig(prev => ({ ...prev, display: { ...prev.display!, rows: parseInt(e.target.value) } }))}
+                    className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+                <div>
+                  <label style={labelStyle}>{locale['custom.gridCols'] || '网格列数'}: {config.display?.cols ?? 5}</label>
+                  <input type="range" min="1" max="20" step="1" value={config.display?.cols ?? 5}
+                    onChange={(e) => setConfig(prev => ({ ...prev, display: { ...prev.display!, cols: parseInt(e.target.value) } }))}
+                    className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.movementType'] || '移动性'}</label>
+                <div className="flex gap-2">
+                  {[{ value: 'static', label: '静态' }, { value: 'linear', label: '移动' }].map(mt => (
+                    <button key={mt.value} onClick={() => updateMovement({ type: mt.value as MovementType })}
+                      className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                      style={{
+                        backgroundColor: config.movement.type === mt.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                        color: config.movement.type === mt.value ? '#2563EB' : 'var(--color-text-secondary)',
+                        border: config.movement.type === mt.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                      }}>
+                      {mt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}</label>
+                <input type="range" min="0" max="5000" step="100" value={config.spawn.lifetime}
+                  onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case 'reaction':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>{locale['taskType.reaction']}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label style={labelStyle}>{locale['custom.targetSize'] || '大小'}: {config.target.size.toFixed(1)}</label>
+                <input type="range" min="0.3" max="2.0" step="0.1" value={config.target.size}
+                  onChange={(e) => updateTarget({ size: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? '1500ms' : `${config.spawn.lifetime}ms`}</label>
+                <input type="range" min="500" max="3000" step="100" value={config.spawn.lifetime || 1500}
+                  onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.spawnInterval'] || '间隔'}: {config.spawn.interval}ms</label>
+                <input type="range" min="500" max="5000" step="100" value={config.spawn.interval}
+                  onChange={(e) => updateSpawn({ interval: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.maxActive'] || '同时数量'}: {config.spawn.maxActive}</label>
+                <input type="range" min="1" max="5" step="1" value={config.spawn.maxActive}
+                  onChange={(e) => updateSpawn({ maxActive: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+            </CardContent>
+          </Card>
+        );
+    }
   };
 
   return (
@@ -267,45 +544,37 @@ export function CustomTaskEditor() {
               <CardContent className="space-y-4">
                 <div>
                   <label style={labelStyle}>{locale['custom.taskName'] || 'Task Name'}</label>
-                  <input
-                    type="text"
-                    value={config.name}
+                  <input type="text" value={config.name}
                     onChange={(e) => updateConfig({ name: e.target.value })}
-                    placeholder="My Custom Task"
-                    style={inputStyle}
-                    maxLength={32}
-                  />
+                    placeholder="My Custom Task" style={inputStyle} maxLength={32} />
                 </div>
                 <div>
                   <label style={labelStyle}>{locale['custom.description'] || 'Description'}</label>
-                  <input
-                    type="text"
-                    value={config.description}
+                  <input type="text" value={config.description}
                     onChange={(e) => updateConfig({ description: e.target.value })}
-                    placeholder={locale['custom.descPlaceholder'] || 'Optional description'}
-                    style={inputStyle}
-                    maxLength={200}
-                  />
+                    placeholder={locale['custom.descPlaceholder'] || 'Optional description'} style={inputStyle} maxLength={200} />
                 </div>
                 <div>
-                  <label style={labelStyle}>{locale['custom.category'] || 'Task Category'}</label>
-                  <select
-                    value={config.category}
-                    onChange={(e) => updateConfig({ category: e.target.value as TaskCategory })}
-                    style={selectStyle}
-                  >
+                  <label style={labelStyle}>{locale['custom.category'] || 'Training Type'}</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {TASK_CATEGORIES.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                      <button key={cat.value} onClick={() => handleCategoryChange(cat.value)}
+                        className="px-3 py-2 rounded-lg text-sm transition-all"
+                        style={{
+                          backgroundColor: config.category === cat.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                          color: config.category === cat.value ? '#2563EB' : 'var(--color-text-secondary)',
+                          border: config.category === cat.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                          fontWeight: config.category === cat.value ? 700 : 500,
+                        }}>
+                        {cat.label}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
                 <div>
                   <label style={labelStyle}>{locale['training.duration'] || 'Duration'}</label>
-                  <select
-                    value={config.duration ?? 30000}
-                    onChange={(e) => updateConfig({ duration: parseInt(e.target.value) })}
-                    style={selectStyle}
-                  >
+                  <select value={config.duration ?? 30000}
+                    onChange={(e) => updateConfig({ duration: parseInt(e.target.value) })} style={selectStyle}>
                     {DURATION_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
@@ -314,253 +583,10 @@ export function CustomTaskEditor() {
               </CardContent>
             </Card>
 
-            {/* Target Config */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{locale['custom.target'] || 'Target Settings'}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label style={labelStyle}>{locale['custom.targetShape'] || 'Shape'}</label>
-                  <div className="flex gap-2">
-                    {TARGET_SHAPES.map(shape => (
-                      <button
-                        key={shape.value}
-                        onClick={() => updateTarget({ shape: shape.value })}
-                        className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                        style={{
-                          backgroundColor: config.target.shape === shape.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
-                          color: config.target.shape === shape.value ? '#2563EB' : 'var(--color-text-secondary)',
-                          border: config.target.shape === shape.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
-                          fontWeight: config.target.shape === shape.value ? 700 : 500,
-                        }}
-                      >
-                        {shape.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>
-                    {locale['custom.targetSize'] || 'Size'}: {config.target.size.toFixed(1)}
-                  </label>
-                  <input
-                    type="range"
-                    min="0.3"
-                    max="2.0"
-                    step="0.1"
-                    value={config.target.size}
-                    onChange={(e) => updateTarget({ size: parseFloat(e.target.value) })}
-                    className="w-full"
-                    style={{ accentColor: '#2563EB' }}
-                  />
-                </div>
-                <div>
-                  <label style={labelStyle}>{locale['custom.targetColor'] || 'Color'}</label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={config.target.color}
-                      onChange={(e) => updateTarget({ color: e.target.value })}
-                      className="w-10 h-10 rounded cursor-pointer"
-                    />
-                    <span className="text-sm text-text-muted">{config.target.color}</span>
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>
-                    {locale['custom.glow'] || 'Glow Intensity'}: {Math.round(config.target.glowIntensity * 100)}%
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={config.target.glowIntensity}
-                    onChange={(e) => updateTarget({ glowIntensity: parseFloat(e.target.value) })}
-                    className="w-full"
-                    style={{ accentColor: '#2563EB' }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            {/* Type-specific parameters */}
+            {renderTypeParams()}
 
-            {/* Movement Config */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{locale['custom.movement'] || 'Movement Settings'}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label style={labelStyle}>{locale['custom.movementType'] || 'Movement Type'}</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {MOVEMENT_TYPES.map(mt => (
-                      <button
-                        key={mt.value}
-                        onClick={() => updateMovement({ type: mt.value })}
-                        className="px-3 py-2 rounded-lg text-sm transition-all text-left"
-                        style={{
-                          backgroundColor: config.movement.type === mt.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
-                          border: config.movement.type === mt.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
-                        }}
-                      >
-                        <div className="font-medium" style={{ color: config.movement.type === mt.value ? '#2563EB' : 'var(--color-text-primary)' }}>
-                          {mt.label}
-                        </div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                          {mt.desc}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {config.movement.type !== 'static' && (
-                  <div>
-                    <label style={labelStyle}>
-                      {locale['custom.speed'] || 'Speed'}: {config.movement.speed.toFixed(1)}
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      step="0.5"
-                      value={config.movement.speed}
-                      onChange={(e) => updateMovement({ speed: parseFloat(e.target.value) })}
-                      className="w-full"
-                      style={{ accentColor: '#2563EB' }}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Spawn Config */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{locale['custom.spawn'] || 'Spawn Settings'}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label style={labelStyle}>{locale['custom.spawnMode'] || 'Spawn Mode'}</label>
-                  <div className="flex gap-2">
-                    {SPAWN_MODES.map(sm => (
-                      <button
-                        key={sm.value}
-                        onClick={() => updateSpawn({ mode: sm.value })}
-                        className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                        style={{
-                          backgroundColor: config.spawn.mode === sm.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
-                          color: config.spawn.mode === sm.value ? '#2563EB' : 'var(--color-text-secondary)',
-                          border: config.spawn.mode === sm.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
-                          fontWeight: config.spawn.mode === sm.value ? 700 : 500,
-                        }}
-                      >
-                        {sm.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label style={labelStyle}>
-                      {locale['custom.maxActive'] || 'Max Active'}: {config.spawn.maxActive}
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      step="1"
-                      value={config.spawn.maxActive}
-                      onChange={(e) => updateSpawn({ maxActive: parseInt(e.target.value) })}
-                      className="w-full"
-                      style={{ accentColor: '#2563EB' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>
-                      {locale['custom.spawnInterval'] || 'Interval'}: {config.spawn.interval}ms
-                    </label>
-                    <input
-                      type="range"
-                      min="200"
-                      max="3000"
-                      step="100"
-                      value={config.spawn.interval}
-                      onChange={(e) => updateSpawn({ interval: parseInt(e.target.value) })}
-                      className="w-full"
-                      style={{ accentColor: '#2563EB' }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>
-                    {locale['custom.lifetime'] || 'Target Lifetime'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="5000"
-                    step="100"
-                    value={config.spawn.lifetime}
-                    onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) })}
-                    className="w-full"
-                    style={{ accentColor: '#2563EB' }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Display Config */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{locale['custom.display'] || 'Display Settings'}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label style={labelStyle}>{locale['custom.gridRows'] || 'Grid Rows'}: {config.display?.rows ?? 3}</label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      step="1"
-                      value={config.display?.rows ?? 3}
-                      onChange={(e) => updateDisplay({ rows: parseInt(e.target.value) })}
-                      className="w-full"
-                      style={{ accentColor: '#2563EB' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>{locale['custom.gridCols'] || 'Grid Cols'}: {config.display?.cols ?? 5}</label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="20"
-                      step="1"
-                      value={config.display?.cols ?? 5}
-                      onChange={(e) => updateDisplay({ cols: parseInt(e.target.value) })}
-                      className="w-full"
-                      style={{ accentColor: '#2563EB' }}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="showLines"
-                    checked={config.display?.showLines ?? true}
-                    onChange={(e) => updateDisplay({ showLines: e.target.checked })}
-                    className="w-4 h-4"
-                    style={{ accentColor: '#2563EB' }}
-                  />
-                  <label htmlFor="showLines" className="text-sm text-text-secondary">
-                    {locale['custom.showGrid'] || 'Show Grid Lines'}
-                  </label>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Scoring Config */}
+            {/* Scoring Weights */}
             <Card>
               <CardHeader>
                 <CardTitle>{locale['custom.scoring'] || 'Scoring Weights'}</CardTitle>
@@ -570,46 +596,22 @@ export function CustomTaskEditor() {
                   <label style={labelStyle}>
                     {locale['custom.weightAccuracy'] || 'Accuracy Weight'}: {Math.round(config.scoring.weightAccuracy * 100)}%
                   </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={config.scoring.weightAccuracy}
-                    onChange={(e) => updateScoring({ weightAccuracy: parseFloat(e.target.value) })}
-                    className="w-full"
-                    style={{ accentColor: '#2563EB' }}
-                  />
+                  <input type="range" min="0" max="1" step="0.05" value={config.scoring.weightAccuracy}
+                    onChange={(e) => updateScoring({ weightAccuracy: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
                 </div>
                 <div>
                   <label style={labelStyle}>
                     {locale['custom.weightSpeed'] || 'Speed Weight'}: {Math.round(config.scoring.weightSpeed * 100)}%
                   </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={config.scoring.weightSpeed}
-                    onChange={(e) => updateScoring({ weightSpeed: parseFloat(e.target.value) })}
-                    className="w-full"
-                    style={{ accentColor: '#2563EB' }}
-                  />
+                  <input type="range" min="0" max="1" step="0.05" value={config.scoring.weightSpeed}
+                    onChange={(e) => updateScoring({ weightSpeed: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
                 </div>
                 <div>
                   <label style={labelStyle}>
                     {locale['custom.weightConsistency'] || 'Consistency Weight'}: {Math.round(config.scoring.weightConsistency * 100)}%
                   </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={config.scoring.weightConsistency}
-                    onChange={(e) => updateScoring({ weightConsistency: parseFloat(e.target.value) })}
-                    className="w-full"
-                    style={{ accentColor: '#2563EB' }}
-                  />
+                  <input type="range" min="0" max="1" step="0.05" value={config.scoring.weightConsistency}
+                    onChange={(e) => updateScoring({ weightConsistency: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
                 </div>
               </CardContent>
             </Card>
@@ -633,7 +635,7 @@ export function CustomTaskEditor() {
                 </div>
                 <div className="text-sm">
                   <span className="text-text-muted">{locale['custom.preview.movement']}: </span>
-                  <span className="text-text-primary">{locale[`custom.mt.${config.movement.type}` as keyof typeof locale] || config.movement.type}</span>
+                  <span className="text-text-primary">{config.movement.type}</span>
                 </div>
                 <div className="text-sm">
                   <span className="text-text-muted">{locale['custom.preview.targets']}: </span>
@@ -647,10 +649,7 @@ export function CustomTaskEditor() {
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-text-muted">{locale['custom.preview.color']}: </span>
-                  <span
-                    className="inline-block w-4 h-4 rounded-full"
-                    style={{ backgroundColor: config.target.color, border: '1px solid var(--color-border)' }}
-                  />
+                  <span className="inline-block w-4 h-4 rounded-full" style={{ backgroundColor: config.target.color, border: '1px solid var(--color-border)' }} />
                   <span className="text-text-primary">{config.target.color}</span>
                 </div>
               </CardContent>
@@ -667,15 +666,8 @@ export function CustomTaskEditor() {
                 </Button>
                 {shareCode && (
                   <>
-                    <div
-                      className="py-3 px-4 rounded-lg font-mono text-xs break-all"
-                      style={{
-                        backgroundColor: 'var(--color-bg-surface-hover)',
-                        border: '1px solid var(--color-border)',
-                        color: '#2563EB',
-                        wordBreak: 'break-all',
-                      }}
-                    >
+                    <div className="py-3 px-4 rounded-lg font-mono text-xs break-all"
+                      style={{ backgroundColor: 'var(--color-bg-surface-hover)', border: '1px solid var(--color-border)', color: '#2563EB', wordBreak: 'break-all' }}>
                       {formatShareCode(shareCode)}
                     </div>
                     <Button variant="ghost" className="w-full" onClick={handleCopyCode}>
@@ -689,12 +681,7 @@ export function CustomTaskEditor() {
             {/* Action Buttons */}
             <Card>
               <CardContent className="space-y-3">
-                <Button
-                  variant="primary"
-                  className="w-full"
-                  onClick={handleSave}
-                  disabled={!config.name.trim()}
-                >
+                <Button variant="primary" className="w-full" onClick={handleSave} disabled={!config.name.trim()}>
                   {locale['custom.saveAndStart'] || 'Save & Start Training'}
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={handleReset}>
