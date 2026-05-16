@@ -1,7 +1,6 @@
 import * as BABYLON from '@babylonjs/core';
 import { BaseScene } from './BaseScene';
 import { GameEngine } from '../engine/GameEngine';
-import { calculateSmoothness } from '@/utils/scoring';
 import { getSceneGridColor, getSceneWallColor } from '@/utils/themeColors';
 
 interface SphereTrackConfig {
@@ -26,16 +25,31 @@ export class SphereTrackScene extends BaseScene {
   private cursorPositions: { x: number; y: number }[] = [];
   private targetPositions: { x: number; y: number }[] = [];
   private angle: number = 0;
-  private trackingScore: number = 0;
+  private realtimeScore: number = 0; // 实时累加的追踪得分
 
   // orbital 模式：随机移动
   private randomVel: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private targetDir: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private readonly RANDOM_SPEED = 5;
 
+  // 追踪得分阈值（屏幕像素）
+  private readonly TRACK_THRESHOLD = 100;
+
   constructor(engine: GameEngine, config?: Partial<SphereTrackConfig>) {
     super(engine, 'sphere-track');
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  start() {
+    this.hits = 0;
+    this.misses = 0;
+    this.reactionTimes = [];
+    this.killTimes = [];
+    this.startTime = performance.now();
+    this.isActive = true;
+    this.lastTargetSpawnTime = this.startTime;
+    this.realtimeScore = 0;
+    // 不调用 setupShooting()，禁用射击逻辑，使用准星重叠实时计分
   }
 
   async setup() {
@@ -163,16 +177,31 @@ export class SphereTrackScene extends BaseScene {
     const screenPos = this.worldToScreen(this.trackingTarget.position);
     this.targetPositions.push(screenPos);
 
-    this.cursorPositions.push({
-      x: this.scene.pointerX,
-      y: this.scene.pointerY,
-    });
+    // 准星位置固定在屏幕中央
+    const engine = this.scene.getEngine();
+    const crosshairX = engine.getRenderWidth() / 2;
+    const crosshairY = engine.getRenderHeight() / 2;
+
+    this.cursorPositions.push({ x: crosshairX, y: crosshairY });
+
+    // 实时计算准星与目标的距离，计算追踪得分
+    const dx = crosshairX - screenPos.x;
+    const dy = crosshairY - screenPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // 距离在阈值内时，距离越近得分越高
+    if (distance < this.TRACK_THRESHOLD) {
+      // 归一化得分：distance=0时得分最高(1)，distance>=THRESHOLD时得分最低(0)
+      const normalizedScore = 1 - distance / this.TRACK_THRESHOLD;
+      // 按帧时间比例累加得分，乘以 100 加速分数增长
+      this.realtimeScore += normalizedScore * (deltaTime / 1000) * 100;
+    }
   }
 
   private createTrackingTarget() {
     this.trackingTarget = BABYLON.MeshBuilder.CreateSphere(
       'trackTarget',
-      { diameter: this.config.targetSize * this.targetSizeMultiplier, segments: 16 },
+      { diameter: this.config.targetSize, segments: 16 },
       this.scene
     );
     this.trackingTarget.position = new BABYLON.Vector3(0, 6, 8);
@@ -241,10 +270,18 @@ export class SphereTrackScene extends BaseScene {
     return { x: screenPos.x, y: screenPos.y };
   }
 
+  getStats() {
+    return {
+      hits: 0,
+      misses: 0,
+      reactionTimes: [] as number[],
+      realtimeScore: this.realtimeScore, // 不取整，保留小数精度
+      isTracking: true, // 标识为追踪场景
+    };
+  }
+
   protected calculateScore(): number {
-    if (this.cursorPositions.length < 3) return 0;
-    this.trackingScore = calculateSmoothness(this.cursorPositions, this.targetPositions);
-    return Math.round(this.trackingScore * 100);
+    return Math.round(this.realtimeScore);
   }
 
   stop() {
@@ -254,7 +291,7 @@ export class SphereTrackScene extends BaseScene {
       taskId: this.taskId,
       timestamp: Date.now(),
       score: this.calculateScore(),
-      accuracy: this.trackingScore,
+      accuracy: 0,
       reactionTime: 0,
       reactionTimes: [],
       kills: 0,

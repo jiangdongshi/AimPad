@@ -10,6 +10,8 @@ interface GameState {
   score: number;
   hits: number;
   misses: number;
+  realtimeScore: number; // 追踪场景的实时分数
+  isTracking: boolean; // 是否为追踪场景
   timeRemaining: number;
   fps: number;
 
@@ -21,7 +23,7 @@ interface GameState {
   updateScore: (hits: number, misses: number) => void;
   setTimeRemaining: (time: number) => void;
   setFps: (fps: number) => void;
-  updateFrameData: (data: { hits: number; misses: number; timeRemaining: number; fps: number }) => void;
+  updateFrameData: (data: { hits: number; misses: number; timeRemaining: number; fps: number; realtimeScore?: number; isTracking?: boolean }) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -31,6 +33,8 @@ export const useGameStore = create<GameState>((set) => ({
   score: 0,
   hits: 0,
   misses: 0,
+  realtimeScore: 0,
+  isTracking: false,
   timeRemaining: 0,
   fps: 0,
 
@@ -41,6 +45,8 @@ export const useGameStore = create<GameState>((set) => ({
     score: 0,
     hits: 0,
     misses: 0,
+    realtimeScore: 0,
+    isTracking: false,
     timeRemaining: Math.ceil(task.duration / 1000),
   }),
 
@@ -61,6 +67,8 @@ export const useGameStore = create<GameState>((set) => ({
     score: 0,
     hits: 0,
     misses: 0,
+    realtimeScore: 0,
+    isTracking: false,
     timeRemaining: 0,
   }),
 
@@ -71,6 +79,6 @@ export const useGameStore = create<GameState>((set) => ({
   setFps: (fps) => set({ fps }),
 
   // 批量更新帧数据，避免多次 setState 触发重复渲染
-  updateFrameData: (data: { hits: number; misses: number; timeRemaining: number; fps: number }) =>
+  updateFrameData: (data: { hits: number; misses: number; timeRemaining: number; fps: number; realtimeScore?: number; isTracking?: boolean }) =>
     set(data),
 }));

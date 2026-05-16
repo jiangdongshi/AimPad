@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS `custom_tasks` (
   `name_zh`         VARCHAR(64)      DEFAULT NULL COMMENT '任务中文名',
   `type`            VARCHAR(32)      NOT NULL COMMENT '任务类型',
   `description`     VARCHAR(256)     DEFAULT NULL COMMENT '任务描述',
-  `difficulty`      VARCHAR(16)      NOT NULL DEFAULT 'beginner' COMMENT '推荐难度',
   `config`          JSON             NOT NULL COMMENT '完整场景配置 (SceneConfig)',
   `play_count`      INT UNSIGNED     NOT NULL DEFAULT 0 COMMENT '被游玩次数',
   `is_public`       TINYINT(1)       NOT NULL DEFAULT 0 COMMENT '是否公开 (0=私有,1=公开)',

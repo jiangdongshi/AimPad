@@ -3,8 +3,7 @@ import { GameEngine } from '@/game/engine/GameEngine';
 import { GridshotScene } from '@/game/scenes/GridshotScene';
 import { SphereTrackScene } from '@/game/scenes/SphereTrackScene';
 import { BaseScene } from '@/game/scenes/BaseScene';
-import type { TrainingTaskConfig, TrainingResult, GameDifficulty } from '@/types/training';
-import { GAME_DIFFICULTY_CONFIG } from '@/types/training';
+import type { TrainingTaskConfig, TrainingResult } from '@/types/training';
 import { trainingStorage } from '@/utils/storage';
 import { useGameStore } from '@/stores/gameStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -15,7 +14,6 @@ import { useCustomTaskStore } from '@/stores/customTaskStore';
 
 type TrainingStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'completed';
 
-const DIFFICULTY_STORAGE_KEY = 'aimpad_task_difficulties';
 const BALL_COLOR_STORAGE_KEY = 'aimpad_ball_color';
 const DEFAULT_BALL_COLOR = '#ADD8E6';
 const WALL_COLOR_STORAGE_KEY = 'aimpad_wall_color';
@@ -33,14 +31,6 @@ export const DURATION_OPTIONS: { value: TaskDuration; labelKey: string }[] = [
   { value: 0, labelKey: 'training.duration.unlimited' },
 ];
 
-function loadTaskDifficulties(): Record<string, GameDifficulty> {
-  try {
-    const stored = localStorage.getItem(DIFFICULTY_STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {}
-  return {};
-}
-
 function loadTaskDurations(): Record<string, TaskDuration> {
   try {
     const stored = localStorage.getItem(DURATION_STORAGE_KEY);
@@ -55,7 +45,6 @@ export function useTraining() {
   const [currentCustomTask, setCurrentCustomTask] = useState<CustomTask | null>(null);
   const [result, setResult] = useState<TrainingResult | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
-  const [taskDifficulties, setTaskDifficulties] = useState<Record<string, GameDifficulty>>(loadTaskDifficulties);
   const [ballColor, setBallColorState] = useState<string>(() => {
     try {
       return localStorage.getItem(BALL_COLOR_STORAGE_KEY) || DEFAULT_BALL_COLOR;
@@ -99,10 +88,6 @@ export function useTraining() {
     return () => observer.disconnect();
   }, []);
 
-  const getTaskDifficulty = useCallback((taskId: string): GameDifficulty => {
-    return taskDifficulties[taskId] ?? 'hard';
-  }, [taskDifficulties]);
-
   const getTaskDuration = useCallback((taskId: string, defaultDuration: number): number => {
     return taskDurations[taskId] ?? defaultDuration;
   }, [taskDurations]);
@@ -111,8 +96,6 @@ export function useTraining() {
     const engine = new GameEngine(canvas);
     engineRef.current = engine;
 
-    const difficulty = taskDifficulties[task.id] ?? 'hard';
-    const diffConfig = GAME_DIFFICULTY_CONFIG[difficulty];
     const duration = taskDurations[task.id] ?? task.duration;
 
     let scene: BaseScene;
@@ -150,12 +133,11 @@ export function useTraining() {
         });
     }
 
-    scene.setDifficulty(diffConfig.targetSizeMultiplier, diffConfig.targetLifetime);
     scene.setTargetColor(ballColor);
     if (wallColor) scene.setWallColor(wallColor);
     scene.setFireButton(useSettingsStore.getState().gamepadFireButton);
     return scene;
-  }, [taskDifficulties, taskDurations, ballColor, wallColor]);
+  }, [taskDurations, ballColor, wallColor]);
 
   const startTraining = useCallback(async (task: TrainingTaskConfig, canvas: HTMLCanvasElement) => {
     setStatus('loading');
@@ -201,12 +183,16 @@ export function useTraining() {
             : useGameStore.getState().fps;
           if (fpsUpdateCounter >= 6) fpsUpdateCounter = 0;
 
-          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses) {
+          const realtimeScore = stats.realtimeScore ?? 0;
+          const isTracking = stats.isTracking ?? false;
+          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses || realtimeScore !== useGameStore.getState().realtimeScore || isTracking !== useGameStore.getState().isTracking) {
             updateFrameData({
               hits: stats.hits,
               misses: stats.misses,
               timeRemaining: displayTime,
               fps,
+              realtimeScore,
+              isTracking,
             });
             setTimeRemaining(displayTime);
             lastTimeRemaining = displayTime;
@@ -299,12 +285,16 @@ export function useTraining() {
             : useGameStore.getState().fps;
           if (fpsUpdateCounter >= 6) fpsUpdateCounter = 0;
 
-          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses) {
+          const realtimeScore = stats.realtimeScore ?? 0;
+          const isTracking = stats.isTracking ?? false;
+          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses || realtimeScore !== useGameStore.getState().realtimeScore || isTracking !== useGameStore.getState().isTracking) {
             updateFrameData({
               hits: stats.hits,
               misses: stats.misses,
               timeRemaining: displayTime,
               fps,
+              realtimeScore,
+              isTracking,
             });
             setTimeRemaining(displayTime);
             lastTimeRemaining = displayTime;
@@ -344,13 +334,9 @@ export function useTraining() {
       const engine = new GameEngine(canvas);
       engineRef.current = engine;
 
-      const difficulty = 'hard';
-      const diffConfig = GAME_DIFFICULTY_CONFIG[difficulty];
-
       const scene = new CustomScene(engine, task, task.id);
       sceneRef.current = scene;
 
-      scene.setDifficulty(diffConfig.targetSizeMultiplier, diffConfig.targetLifetime);
       scene.setTargetColor(ballColor);
       if (wallColor) scene.setWallColor(wallColor);
       scene.setFireButton(useSettingsStore.getState().gamepadFireButton);
@@ -386,12 +372,16 @@ export function useTraining() {
             : useGameStore.getState().fps;
           if (fpsUpdateCounter >= 6) fpsUpdateCounter = 0;
 
-          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses) {
+          const realtimeScore = stats.realtimeScore ?? 0;
+          const isTracking = stats.isTracking ?? false;
+          if (displayTime !== lastTimeRemaining || stats.hits !== useGameStore.getState().hits || stats.misses !== useGameStore.getState().misses || realtimeScore !== useGameStore.getState().realtimeScore || isTracking !== useGameStore.getState().isTracking) {
             updateFrameData({
               hits: stats.hits,
               misses: stats.misses,
               timeRemaining: displayTime,
               fps,
+              realtimeScore,
+              isTracking,
             });
             setTimeRemaining(displayTime);
             lastTimeRemaining = displayTime;
@@ -418,18 +408,6 @@ export function useTraining() {
       setStatus('idle');
     }
   }, [ballColor, wallColor, updateFrameData, handleTrainingEnd]);
-
-  const setGameDifficulty = useCallback((taskId: string, difficulty: GameDifficulty) => {
-    setTaskDifficulties((prev) => {
-      const next = { ...prev, [taskId]: difficulty };
-      try { localStorage.setItem(DIFFICULTY_STORAGE_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
-    if (sceneRef.current && currentTaskRef.current?.id === taskId) {
-      const config = GAME_DIFFICULTY_CONFIG[difficulty];
-      sceneRef.current.setDifficulty(config.targetSizeMultiplier, config.targetLifetime);
-    }
-  }, []);
 
   const setBallColor = useCallback((color: string) => {
     setBallColorState(color);
@@ -486,56 +464,18 @@ export function useTraining() {
     elapsedBeforePauseRef.current = 0;
   }, []);
 
-  const restartForDifficulty = useCallback((canvas?: HTMLCanvasElement | null) => {
-    return new Promise<void>((resolve) => {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-        animFrameRef.current = 0;
-      }
-
-      requestAnimationFrame(() => {
-        if (canvas) {
-          const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-          if (gl) {
-            const [r, g, b] = getSceneBackgroundRgb();
-            gl.clearColor(r, g, b, 1.0);
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            gl.finish();
-          }
-        }
-
-        requestAnimationFrame(() => {
-          sceneRef.current?.dispose();
-          engineRef.current?.dispose();
-          sceneRef.current = null;
-          engineRef.current = null;
-
-          setStatus('idle');
-          setResult(null);
-          setTimeRemaining(0);
-          elapsedBeforePauseRef.current = 0;
-
-          resolve();
-        });
-      });
-    });
-  }, []);
-
   return {
     status,
     currentTask,
     currentCustomTask,
     result,
     timeRemaining,
-    getTaskDifficulty,
     startTraining,
     startCustomTraining,
     pauseTraining,
     resumeTraining,
     stopTraining,
     resetTraining,
-    restartForDifficulty,
-    setGameDifficulty,
     ballColor,
     setBallColor,
     wallColor,

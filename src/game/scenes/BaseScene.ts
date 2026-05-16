@@ -13,10 +13,6 @@ export abstract class BaseScene {
   protected isActive: boolean = false;
   protected taskId: string;
 
-  // 难度配置
-  protected targetLifetime: number = 0; // 0 表示无限制
-  protected targetSizeMultiplier: number = 1.0;
-
   // 目标小球颜色（默认淡蓝色 #ADD8E6）
   protected targetColor: BABYLON.Color3 = new BABYLON.Color3(0.68, 0.85, 0.9);
 
@@ -270,12 +266,6 @@ export abstract class BaseScene {
     return ground;
   }
 
-  // 设置难度配置
-  setDifficulty(targetSizeMultiplier: number, targetLifetime: number) {
-    this.targetSizeMultiplier = targetSizeMultiplier;
-    this.targetLifetime = targetLifetime;
-  }
-
   // 所有墙壁材质名称，用于按名查找更新（兜底策略）
   private static readonly WALL_MAT_NAMES = ['wallMat', 'roomMat'];
 
@@ -368,32 +358,14 @@ export abstract class BaseScene {
     this.registerWallMaterial(roomMat);
   }
 
-  // 检查过期目标（困难/地狱模式）
-  protected checkExpiredTargets() {
-    if (this.targetLifetime <= 0) return;
-
-    const now = performance.now();
-    const expired: BABYLON.Mesh[] = [];
-
-    for (const target of this.targets) {
-      const spawnTime = target.metadata?.spawnTime || 0;
-      if (spawnTime > 0 && now - spawnTime > this.targetLifetime) {
-        expired.push(target);
-      }
-    }
-
-    for (const target of expired) {
-      this.misses++;
-      this.removeTarget(target);
-    }
-  }
-
   // 获取统计数据
   getStats() {
     return {
       hits: this.hits,
       misses: this.misses,
       reactionTimes: this.reactionTimes,
+      realtimeScore: 0, // 追踪场景会重写此方法返回实时分数
+      isTracking: false, // 追踪场景会重写此方法返回 true
     };
   }
 

@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config } from './config';
 import { authRouter } from './routes/auth';
 import { settingsRouter } from './routes/settings';
+import { adminRouter } from './routes/admin';
 import { redis } from './redis';
 
 const app = express();
@@ -34,6 +35,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/admin', adminRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

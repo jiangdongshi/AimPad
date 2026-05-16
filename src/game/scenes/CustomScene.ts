@@ -82,16 +82,8 @@ export class CustomScene extends BaseScene {
     }
 
     // 初始生成目标
-    if (this.config.spawn.mode === 'continuous') {
-      // continuous 模式只生成一个
-      if (this.config.spawn.maxActive >= 1) {
-        this.spawnInitialTarget();
-      }
-    } else {
-      // interval/burst 模式生成多个
-      for (let i = 0; i < this.config.spawn.maxActive; i++) {
-        this.spawnRandomTarget();
-      }
+    for (let i = 0; i < this.config.spawn.maxActive; i++) {
+      this.spawnRandomTarget();
     }
   }
 
@@ -201,9 +193,6 @@ export class CustomScene extends BaseScene {
 
     const now = performance.now();
 
-    // 检查过期目标
-    this.checkExpiredTargets();
-
     // 更新移动目标位置
     if (this.isTrackingType()) {
       this.updateMovingTarget(deltaTime);
@@ -237,6 +226,7 @@ export class CustomScene extends BaseScene {
     const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
     const speed = this.config.movement.speed;
     const type = this.config.movement.type;
+    const randomness = this.config.movement.randomness ?? 0;
 
     this.movementPhase += speed * deltaTime / 1000;
 
@@ -291,18 +281,28 @@ export class CustomScene extends BaseScene {
         return;
     }
 
+    // 叠加路径噪声（随机度 > 0 时）
+    if (randomness > 0) {
+      const noiseScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.5;
+      const time = this.movementPhase;
+      // 使用多个不同频率的正弦波叠加产生类噪声效果
+      const noiseX = (Math.sin(time * 1.7 + 0.3) * 0.4 + Math.sin(time * 3.1 + 1.7) * 0.3 + Math.sin(time * 5.3 + 2.9) * 0.3) * noiseScale;
+      const noiseY = (Math.sin(time * 2.3 + 1.1) * 0.4 + Math.sin(time * 4.7 + 0.5) * 0.3 + Math.sin(time * 6.1 + 3.7) * 0.3) * noiseScale;
+      x += noiseX;
+      y += noiseY;
+    }
+
+    // 限制在边界内
+    x = Math.max(bounds.xMin, Math.min(bounds.xMax, x));
+    y = Math.max(bounds.yMin, Math.min(bounds.yMax, y));
+
     target.position.x = x;
     target.position.y = y;
     target.position.z = 8;
   }
 
   private handleSpawning(now: number) {
-    const { mode, maxActive, interval } = this.config.spawn;
-
-    if (mode === 'continuous') {
-      // continuous 模式只有一个目标，不重新生成
-      return;
-    }
+    const { maxActive, interval } = this.config.spawn;
 
     // 检查是否需要补充目标
     if (this.targets.length >= maxActive) return;
@@ -313,15 +313,6 @@ export class CustomScene extends BaseScene {
     // 生成新目标
     this.spawnRandomTarget();
     this.lastSpawnTime = now;
-  }
-
-  private spawnInitialTarget() {
-    const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
-    const centerX = (bounds.xMin + bounds.xMax) / 2;
-    const centerY = (bounds.yMin + bounds.yMax) / 2;
-
-    const position = new BABYLON.Vector3(centerX, centerY, 8);
-    this.spawnTarget(position, this.config.target.size);
   }
 
   private spawnRandomTarget() {
@@ -350,7 +341,7 @@ export class CustomScene extends BaseScene {
       position = new BABYLON.Vector3(x, y, 8);
     }
 
-    const actualSize = this.config.target.size * this.targetSizeMultiplier;
+    const actualSize = this.config.target.size;
     this.spawnTarget(position, actualSize);
   }
 

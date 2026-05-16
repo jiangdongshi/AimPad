@@ -43,6 +43,7 @@ export interface MovementBounds {
 export interface MovementConfig {
   type: MovementType;
   speed: number;          // 1 ~ 10
+  randomness?: number;    // 0 ~ 100, 路径噪声强度（跟踪训练用）
   pattern?: MovementPattern;
   bounds?: MovementBounds;
 }
@@ -73,19 +74,6 @@ export interface ScoringWeights {
   weightConsistency: number;  // 0 ~ 1
 }
 
-// 预设难度映射
-export interface DifficultyPreset {
-  targetSizeMult: number;
-  speedMult: number;
-  lifetime: number;
-}
-
-export interface DifficultyPresets {
-  easy: DifficultyPreset;
-  normal: DifficultyPreset;
-  hard: DifficultyPreset;
-}
-
 // 完整场景配置
 export interface SceneConfig {
   // 基础信息
@@ -113,9 +101,6 @@ export interface SceneConfig {
 
   // 计分配置
   scoring: ScoringWeights;
-
-  // 预设难度映射
-  difficultyPresets?: DifficultyPresets;
 }
 
 // 自定义任务（带元数据）
@@ -184,13 +169,6 @@ export const DEFAULT_SCORING: ScoringWeights = {
   weightConsistency: 0.2,
 };
 
-// 默认难度预设
-export const DEFAULT_DIFFICULTY_PRESETS: DifficultyPresets = {
-  easy: { targetSizeMult: 1.5, speedMult: 1.0, lifetime: 0 },
-  normal: { targetSizeMult: 1.0, speedMult: 1.0, lifetime: 0 },
-  hard: { targetSizeMult: 0.5, speedMult: 1.0, lifetime: 2000 },
-};
-
 // 创建空白配置的工厂函数
 export function createDefaultSceneConfig(): SceneConfig {
   return {
@@ -203,7 +181,6 @@ export function createDefaultSceneConfig(): SceneConfig {
     spawn: { ...DEFAULT_SPAWN },
     display: { ...DEFAULT_DISPLAY },
     scoring: { ...DEFAULT_SCORING },
-    difficultyPresets: { ...DEFAULT_DIFFICULTY_PRESETS },
   };
 }
 

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { TRAINING_TASKS, GAME_DIFFICULTY_CONFIG } from '@/types/training';
-import type { TrainingTaskConfig, GameDifficulty } from '@/types/training';
+import { TRAINING_TASKS } from '@/types/training';
+import type { TrainingTaskConfig } from '@/types/training';
 import { useTraining, DURATION_OPTIONS } from '@/hooks/useTraining';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -60,13 +60,11 @@ export function Training() {
     currentTask,
     result,
     timeRemaining,
-    getTaskDifficulty,
     startTraining,
     startCustomTraining,
     pauseTraining,
     resumeTraining,
     resetTraining,
-    setGameDifficulty,
     ballColor,
     setBallColor,
     wallColor,
@@ -75,15 +73,13 @@ export function Training() {
     setTaskDuration,
   } = useTraining();
 
-  const { hits, misses, score, fps } = useGameStore();
+  const { hits, misses, score, fps, realtimeScore, isTracking } = useGameStore();
   const isPausedByUser = useRef(false); // 标记是否是用户主动暂停
   const [isPaused, setIsPaused] = useState(false);
-  const [showDifficultyPopup, setShowDifficultyPopup] = useState(false);
   const [showDurationPopup, setShowDurationPopup] = useState(false);
   const [showColorPopup, setShowColorPopup] = useState(false);
   const [showWallColorPopup, setShowWallColorPopup] = useState(false);
   const pausePhaseRef = useRef<'idle' | 'countdown' | 'resume-countdown' | null>(null); // 暂停时所处阶段
-  const pausedDifficultySnapshotRef = useRef<GameDifficulty | null>(null); // 暂停时的难度快照（仅首次暂停时记录，防止被难度变化覆盖）
 
   const selectedTask = taskId
     ? TRAINING_TASKS.find(t => t.id === taskId)
@@ -92,9 +88,6 @@ export function Training() {
   const selectedCustomTask = customTaskId
     ? customTasks.find(t => t.id === customTaskId) || null
     : null;
-
-  // 当前任务的游戏难度（每个任务独立）
-  const gameDifficulty = selectedTask ? getTaskDifficulty(selectedTask.id) : 'hard' as GameDifficulty;
 
   // 当前任务的训练时长（每个任务独立）
   const currentDuration = selectedTask ? getTaskDuration(selectedTask.id, selectedTask.duration) : 30000;
@@ -120,12 +113,9 @@ export function Training() {
 
   // 弹窗外部点击关闭
   useEffect(() => {
-    if (!showDifficultyPopup && !showDurationPopup && !showColorPopup && !showWallColorPopup) return;
+    if (!showDurationPopup && !showColorPopup && !showWallColorPopup) return;
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (showDifficultyPopup && !target.closest('[data-difficulty-popup]')) {
-        setShowDifficultyPopup(false);
-      }
       if (showDurationPopup && !target.closest('[data-duration-popup]')) {
         setShowDurationPopup(false);
       }
@@ -138,21 +128,14 @@ export function Training() {
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [showDifficultyPopup, showDurationPopup, showColorPopup, showWallColorPopup]);
+  }, [showDurationPopup, showColorPopup, showWallColorPopup]);
 
-  // 暂停时退出指针锁定，并记录暂停时的难度快照（仅在进入暂停时记录一次）
+  // 暂停时退出指针锁定
   useEffect(() => {
     if (status === 'paused') {
       isPausedByUser.current = true;
       document.exitPointerLock();
       setIsPointerLocked(false);
-      // 仅在首次进入暂停状态时记录难度快照，后续难度变化不覆盖
-      if (pausedDifficultySnapshotRef.current === null) {
-        pausedDifficultySnapshotRef.current = gameDifficulty;
-      }
-    } else {
-      // 退出暂停时清空快照
-      pausedDifficultySnapshotRef.current = null;
     }
   }, [status]);
 
@@ -162,10 +145,6 @@ export function Training() {
       if (e.key !== 'Escape') return;
 
       // 弹窗打开时，ESC 关闭弹窗
-      if (showDifficultyPopup) {
-        setShowDifficultyPopup(false);
-        return;
-      }
       if (showDurationPopup) {
         setShowDurationPopup(false);
         return;
@@ -200,7 +179,7 @@ export function Training() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [status, selectedTask, countdown, isPaused, showDifficultyPopup, showDurationPopup, showColorPopup, showWallColorPopup]);
+  }, [status, selectedTask, countdown, isPaused, showDurationPopup, showColorPopup, showWallColorPopup]);
 
   const handleStart = useCallback(async (task: TrainingTaskConfig) => {
     // 先导航到带 task 参数的 URL，让 canvas 渲染出来
@@ -238,24 +217,11 @@ export function Training() {
 
     pausePhaseRef.current = null;
 
-    // playing 阶段的暂停：检查难度是否变化
-    if (pausedDifficultySnapshotRef.current !== null) {
-      const difficultyChanged = pausedDifficultySnapshotRef.current !== gameDifficulty;
-      pausedDifficultySnapshotRef.current = null;
-
-      if (difficultyChanged) {
-        // 难度已变化 → 直接回到「点击开始训练」界面，难度已在暂停时保存
-        const canvas = document.querySelector('canvas');
-        resetTraining(canvas);
-        return;
-      }
-    }
-
-    // 难度未变 → 倒计时 3-2-1 后恢复训练
+    // 倒计时 3-2-1 后恢复训练
     setCountdown(3);
     setIsResuming(true);
     resumeTrainingRef.current = resumeTraining;
-  }, [resumeTraining, gameDifficulty, resetTraining]);
+  }, [resumeTraining, resetTraining]);
 
   // 手柄开火按钮启动训练（100ms 轮询即可，无需 rAF 全帧率轮询）
   useEffect(() => {
@@ -447,15 +413,6 @@ export function Training() {
                 <div className="flex items-start justify-between mb-4">
                   <h3 className="text-xl font-gaming text-text-primary">{locale[`task.${task.id}` as keyof typeof locale] || task.name}</h3>
                   <div className="flex items-center gap-2">
-                    <span className={`
-                      px-2.5 py-1 rounded-full text-xs font-medium
-                      ${task.difficulty === 'beginner' ? 'bg-success/20 text-success' :
-                        task.difficulty === 'intermediate' ? 'bg-warning/20 text-warning' :
-                        task.difficulty === 'advanced' ? 'bg-danger/20 text-danger' :
-                        'bg-primary-500/20 text-primary-400'}
-                    `}>
-                      {locale[`difficulty.${task.difficulty}` as keyof typeof locale]}
-                    </span>
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleFavorite(task.id); }}
                       className="p-1 rounded transition-colors"
@@ -565,17 +522,7 @@ export function Training() {
                   <div className="flex items-start justify-between mb-4">
                     <h3 className="text-xl font-gaming text-text-primary">{displayName}</h3>
                     <div className="flex items-center gap-2">
-                      {isPreset ? (
-                        <span className={`
-                          px-2.5 py-1 rounded-full text-xs font-medium
-                          ${(task as TrainingTaskConfig).difficulty === 'beginner' ? 'bg-success/20 text-success' :
-                            (task as TrainingTaskConfig).difficulty === 'intermediate' ? 'bg-warning/20 text-warning' :
-                            (task as TrainingTaskConfig).difficulty === 'advanced' ? 'bg-danger/20 text-danger' :
-                            'bg-primary-500/20 text-primary-400'}
-                        `}>
-                          {locale[`difficulty.${(task as TrainingTaskConfig).difficulty}` as keyof typeof locale]}
-                        </span>
-                      ) : (
+                      {!isPreset && (
                         <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary-500/20 text-primary-400">
                           {locale['custom.badge'] || 'Custom'}
                         </span>
@@ -673,6 +620,8 @@ export function Training() {
             misses={misses}
             timeRemaining={timeRemaining}
             fps={fps}
+            realtimeScore={realtimeScore}
+            isTracking={isTracking}
           />
 
           {/* 点击开始训练提示（仅在等待开始且无倒计时时显示） */}
@@ -718,83 +667,6 @@ export function Training() {
                 <h2 className="text-3xl font-gaming mb-6" style={{ color: '#2563EB' }}>
                   {locale['training.paused']}
                 </h2>
-
-                {/* 当前难度 + 选择按钮 */}
-                <div className="mb-6">
-                  <div
-                    className="text-sm mb-3"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
-                    {locale['training.currentDifficulty']?.replace('{difficulty}', locale[GAME_DIFFICULTY_CONFIG[gameDifficulty].label]) || locale['difficulty.select']}
-                  </div>
-                  <div className="relative inline-block" data-difficulty-popup>
-                    <button
-                      onClick={() => setShowDifficultyPopup(!showDifficultyPopup)}
-                      className="px-5 py-2.5 rounded-xl text-sm font-medium inline-flex items-center gap-2"
-                      style={{
-                        backgroundColor: 'var(--color-bg-surface-hover)',
-                        color: '#2563EB',
-                        border: '1px solid #2563EB',
-                        fontWeight: 700,
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      {locale[GAME_DIFFICULTY_CONFIG[gameDifficulty].label]}
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: showDifficultyPopup ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}>
-                        <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-
-                    {/* 难度选择弹窗 */}
-                    {showDifficultyPopup && (
-                      <div
-                        className="absolute top-full mt-2 left-1/2 -translate-x-1/2 rounded-xl py-2 min-w-[200px] z-10"
-                        style={{
-                          backgroundColor: 'var(--color-bg-surface)',
-                          border: '1px solid var(--color-border)',
-                          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-                        }}
-                      >
-                        {(Object.keys(GAME_DIFFICULTY_CONFIG) as GameDifficulty[]).map((diff) => (
-                          <button
-                            key={diff}
-                            onClick={() => {
-                              if (selectedTask) setGameDifficulty(selectedTask.id, diff);
-                              setShowDifficultyPopup(false);
-                            }}
-                            className="w-full text-left px-5 py-2.5 text-sm transition-colors flex items-center justify-between"
-                            style={{
-                              color: gameDifficulty === diff ? '#2563EB' : 'var(--color-text-secondary)',
-                              backgroundColor: gameDifficulty === diff ? 'rgba(37, 99, 235, 0.15)' : 'transparent',
-                              fontWeight: gameDifficulty === diff ? 700 : 500,
-                            }}
-                          >
-                            {locale[GAME_DIFFICULTY_CONFIG[diff].label]}
-                            {gameDifficulty === diff && (
-                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                <path d="M3 7.5L5.5 10L11 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            )}
-                          </button>
-                        ))}
-                        <div
-                          className="mx-4 my-2 border-t"
-                          style={{ borderColor: 'var(--color-border)' }}
-                        />
-                        <div
-                          className="px-5 py-2 text-xs"
-                          style={{ color: 'var(--color-text-muted)' }}
-                        >
-                          {gameDifficulty === 'easy' && locale['difficulty.easy.desc']}
-                          {gameDifficulty === 'simple' && locale['difficulty.simple.desc']}
-                          {gameDifficulty === 'normal' && locale['difficulty.normal.desc']}
-                          {gameDifficulty === 'hard' && locale['difficulty.hard.desc']}
-                          {gameDifficulty === 'hell' && locale['difficulty.hell.desc']}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
 
                 {/* 训练时长选择 */}
                 <div className="mb-6">
