@@ -103,7 +103,6 @@ function UserManagement({ locale }: { locale: Record<string, string> }) {
   };
 
   const handleDelete = async (userId: number) => {
-    if (!window.localeCompare && !confirm(locale['admin.user.deleteConfirm'])) return;
     if (!confirm(locale['admin.user.deleteConfirm'])) return;
     try {
       await adminApi.deleteUser(userId);
@@ -247,7 +246,7 @@ function TaskManagement({ locale }: { locale: Record<string, string> }) {
 
   const handleToggleActive = async (task: AdminTask) => {
     try {
-      const updated = await adminApi.updateTask(task.id, { isActive: !task.isActive });
+      await adminApi.updateTask(task.id, { isActive: !task.isActive });
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, isActive: !task.isActive } : t));
     } catch (err) {
       console.error('Failed to toggle task:', err);
