@@ -28,8 +28,7 @@ export class GridshotScene extends BaseScene {
   // 格子占用追踪：key = "row,col"，value = mesh
   private occupiedCells = new Map<string, BABYLON.Mesh>();
 
-  // 补充队列：避免同帧内创建多个目标造成卡顿
-  private spawnQueue: number = 0;
+  // 补充相关状态
   private lastSpawnTime: number = 0;
   private static readonly SPAWN_COOLDOWN_MS = 50; // 补充间隔 50ms，肉眼不可感知
 
@@ -58,19 +57,12 @@ export class GridshotScene extends BaseScene {
     // 检测场上活跃目标数量（removeTarget 已同步从数组移除，length 即活跃数）
     const missingCount = this.config.targetCount - this.targets.length;
 
-    if (missingCount > this.spawnQueue) {
-      this.spawnQueue = missingCount;
-    }
-
-    // 按冷却间隔逐个补充，避免同帧批量创建造成卡顿
-    if (this.spawnQueue > 0 && now - this.lastSpawnTime >= GridshotScene.SPAWN_COOLDOWN_MS) {
+    // 当目标数不足时，优先补充（快速响应，无冷却延迟）
+    if (missingCount > 0 && now - this.lastSpawnTime >= GridshotScene.SPAWN_COOLDOWN_MS) {
       if (this.spawnRandomTarget()) {
-        this.spawnQueue--;
         this.lastSpawnTime = now;
-      } else {
-        // 没有空格子可用了，清空队列
-        this.spawnQueue = 0;
       }
+      // 如果生成失败（无空格子），不更新 lastSpawnTime，下一帧会重试
     }
 
     if (this.config.duration > 0 && now - this.startTime > this.config.duration) {
@@ -121,6 +113,8 @@ export class GridshotScene extends BaseScene {
       this.occupiedCells.delete(cellKey);
     }
     super.onTargetHit(mesh);
+    // 立即补充一个新目标，无延迟
+    this.spawnRandomTarget();
   }
 
   private createGridLines() {

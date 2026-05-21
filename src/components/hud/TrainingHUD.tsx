@@ -2,16 +2,15 @@ import { useLocale } from '@/hooks/useTheme';
 import { getSceneHudBg } from '@/utils/themeColors';
 
 interface TrainingHUDProps {
-  score: number;
   hits: number;
   misses: number;
   timeRemaining: number;
   fps?: number;
-  realtimeScore?: number; // 追踪场景的实时分数
+  realtimeScore?: number; // 实时分数
   isTracking?: boolean; // 是否为追踪场景
 }
 
-export function TrainingHUD({ score, hits, misses, timeRemaining, fps, realtimeScore, isTracking }: TrainingHUDProps) {
+export function TrainingHUD({ hits, misses, timeRemaining, fps, realtimeScore, isTracking }: TrainingHUDProps) {
   const locale = useLocale();
   const accuracy = hits + misses > 0 ? ((hits / (hits + misses)) * 100).toFixed(1) : '0.0';
   const minutes = Math.floor(timeRemaining / 60);
@@ -20,8 +19,8 @@ export function TrainingHUD({ score, hits, misses, timeRemaining, fps, realtimeS
 
   // 使用 isTracking 标志判断是否为追踪场景
   const isTrackingMode = isTracking === true;
-  // 追踪模式下，左上角显示实时分数（取整）；射击模式下显示 score
-  const displayScore = isTrackingMode ? Math.round(realtimeScore ?? 0) : score;
+  // 所有模式都使用实时分数（追踪场景和射击场景都实时更新）
+  const displayScore = Math.round(realtimeScore ?? 0);
 
   return (
     <>
