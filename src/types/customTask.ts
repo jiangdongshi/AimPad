@@ -39,11 +39,15 @@ export interface MovementBounds {
   yMax: number;
 }
 
+// 线性运动方向
+export type LinearDirection = 'horizontal' | 'vertical' | 'diagonal-tl-br' | 'diagonal-tr-bl';
+
 // 运动配置
 export interface MovementConfig {
   type: MovementType;
   speed: number;          // 1 ~ 10
   randomness?: number;    // 0 ~ 100, 路径噪声强度（跟踪训练用）
+  direction?: LinearDirection;  // 线性运动方向（仅 linear 类型使用）
   pattern?: MovementPattern;
   bounds?: MovementBounds;
 }

@@ -42,6 +42,7 @@ export function Training() {
   const navigate = useNavigate();
   const taskId = searchParams.get('task');
   const customTaskId = searchParams.get('custom');
+  const tabParam = searchParams.get('tab');
   const locale = useLocale();
   const isZh = useSettingsStore((s) => s.locale) === 'zh';
   const customTasks = useCustomTaskStore((s) => s.tasks);
@@ -49,7 +50,10 @@ export function Training() {
   const toggleFavorite = useCustomTaskStore((s) => s.toggleFavorite);
   const removeTask = useCustomTaskStore((s) => s.removeTask);
   const pendingStartRef = useRef<TrainingTaskConfig | null>(null);
-  const [activeTab, setActiveTab] = useState<'preset' | 'custom' | 'favorites'>('preset');
+  const [activeTab, setActiveTab] = useState<'preset' | 'custom' | 'favorites'>(() => {
+    if (tabParam === 'custom' || tabParam === 'favorites') return tabParam;
+    return 'preset';
+  });
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
@@ -293,13 +297,17 @@ export function Training() {
             resumeTrainingRef.current();
             resumeTrainingRef.current = null;
           }
-          setIsResuming(false);
           // 指针锁定推迟到下一事件循环，避免阻塞恢复操作
+          // isResuming 保持 true，直到指针锁定成功后再设为 false
           setTimeout(() => {
             const canvas = document.querySelector('canvas');
             if (canvas) {
               try { canvas.requestPointerLock(); } catch {}
             }
+            // 延迟清除 isResuming 标志，给指针锁定足够时间生效
+            setTimeout(() => {
+              setIsResuming(false);
+            }, 100);
           }, 0);
         } else {
           // 首次开始训练 / 重新开始
@@ -455,6 +463,17 @@ export function Training() {
                       style={{ color: favorites.includes(task.id) ? '#f59e0b' : 'var(--color-text-muted)' }}
                     >
                       {favorites.includes(task.id) ? '★' : '☆'}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/custom-task?edit=${task.id}`);
+                      }}
+                      className="p-1 rounded transition-colors"
+                      style={{ color: 'var(--color-text-muted)' }}
+                      title={locale['custom.edit'] || 'Edit'}
+                    >
+                      ✎
                     </button>
                     <button
                       onClick={(e) => {
@@ -615,7 +634,6 @@ export function Training() {
           {/* 自定义准星 - 固定在屏幕中央 */}
           <Crosshair />
           <TrainingHUD
-            score={score}
             hits={hits}
             misses={misses}
             timeRemaining={timeRemaining}

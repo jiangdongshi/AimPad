@@ -364,7 +364,7 @@ export abstract class BaseScene {
       hits: this.hits,
       misses: this.misses,
       reactionTimes: this.reactionTimes,
-      realtimeScore: 0, // 追踪场景会重写此方法返回实时分数
+      realtimeScore: this.calculateScore(), // 实时计算分数
       isTracking: false, // 追踪场景会重写此方法返回 true
     };
   }

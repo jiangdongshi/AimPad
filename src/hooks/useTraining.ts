@@ -146,6 +146,9 @@ export function useTraining() {
     setResult(null);
     elapsedBeforePauseRef.current = 0;
 
+    // 重置游戏状态（得分、命中、脱靶等）
+    useGameStore.getState().resetTraining();
+
     try {
       const scene = createScene(task, canvas);
       sceneRef.current = scene;
@@ -330,6 +333,9 @@ export function useTraining() {
     setResult(null);
     elapsedBeforePauseRef.current = 0;
 
+    // 重置游戏状态（得分、命中、脱靶等）
+    useGameStore.getState().resetTraining();
+
     try {
       const engine = new GameEngine(canvas);
       engineRef.current = engine;
@@ -453,6 +459,9 @@ export function useTraining() {
     engineRef.current?.dispose();
     sceneRef.current = null;
     engineRef.current = null;
+
+    // 重置游戏状态
+    useGameStore.getState().resetTraining();
 
     setStatus('idle');
     setCurrentTask(null);

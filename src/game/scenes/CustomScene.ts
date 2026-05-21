@@ -59,6 +59,10 @@ export class CustomScene extends BaseScene {
   // 运动相关状态
   private movementPhase: number = 0;
 
+  // 格子占用追踪（静态点击类型使用，与 GridshotScene 逻辑一致）
+  private occupiedCells = new Map<string, BABYLON.Mesh>();
+  private static readonly SPAWN_COOLDOWN_MS = 50;
+
   constructor(engine: GameEngine, config: SceneConfig, taskId?: string) {
     super(engine, taskId || `custom-${Date.now()}`);
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -157,23 +161,30 @@ export class CustomScene extends BaseScene {
   }
 
   private createTrackGuide() {
-    const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
     const gridColor = this.hexToColor3(this.config.display?.lineColor || '#333344');
     const points: BABYLON.Vector3[] = [];
-    const segments = 64;
 
-    const centerX = (bounds.xMin + bounds.xMax) / 2;
-    const centerY = (bounds.yMin + bounds.yMax) / 2;
-    const radiusX = (bounds.xMax - bounds.xMin) / 2;
-    const radiusY = (bounds.yMax - bounds.yMin) / 2;
+    if (this.config.movement.type === 'linear') {
+      // 线性运动：根据方向绘制直线轨道
+      const [start, end] = this.getLinearGuideEndpoints();
+      points.push(start, end);
+    } else {
+      // 圆形/正弦/8字运动：绘制椭圆轨道
+      const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
+      const segments = 64;
+      const centerX = (bounds.xMin + bounds.xMax) / 2;
+      const centerY = (bounds.yMin + bounds.yMax) / 2;
+      const radiusX = (bounds.xMax - bounds.xMin) / 2;
+      const radiusY = (bounds.yMax - bounds.yMin) / 2;
 
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      points.push(new BABYLON.Vector3(
-        centerX + Math.cos(angle) * radiusX,
-        centerY + Math.sin(angle) * radiusY,
-        8
-      ));
+      for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        points.push(new BABYLON.Vector3(
+          centerX + Math.cos(angle) * radiusX,
+          centerY + Math.sin(angle) * radiusY,
+          8
+        ));
+      }
     }
 
     this.trackGuide = BABYLON.MeshBuilder.CreateLines(
@@ -188,12 +199,42 @@ export class CustomScene extends BaseScene {
     return ['circular', 'sine', 'figure8', 'linear'].includes(this.config.movement.type);
   }
 
+  private isStaticType(): boolean {
+    return this.config.movement.type === 'static';
+  }
+
+  /** 获取当前未被占用的格子列表（静态点击类型使用） */
+  private getAvailableCells(rows: number, cols: number): [number, number][] {
+    const cells: [number, number][] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!this.occupiedCells.has(`${r},${c}`)) {
+          cells.push([r, c]);
+        }
+      }
+    }
+    return cells;
+  }
+
+  protected onTargetHit(mesh: BABYLON.Mesh) {
+    // 静态点击类型：先释放格子占用（与 GridshotScene 逻辑一致）
+    if (this.isStaticType()) {
+      const cellKey = mesh.metadata?.cellKey as string | undefined;
+      if (cellKey) {
+        this.occupiedCells.delete(cellKey);
+      }
+    }
+    super.onTargetHit(mesh);
+    // 立即补充一个新目标，无延迟
+    this.spawnRandomTarget();
+  }
+
   update(deltaTime: number) {
     if (!this.isActive) return;
 
     const now = performance.now();
 
-    // 更新移动目标位置
+    // 更新移动目标位置（动态点击和跟踪类型都需要）
     if (this.isTrackingType()) {
       this.updateMovingTarget(deltaTime);
     }
@@ -201,8 +242,8 @@ export class CustomScene extends BaseScene {
     // 生成新目标
     this.handleSpawning(now);
 
-    // 记录跟踪数据
-    if (this.isTrackingType() && this.targets.length > 0) {
+    // 记录跟踪数据（仅跟踪类型需要，用于计算平滑度）
+    if (this.config.category === 'tracking' && this.targets.length > 0) {
       const target = this.targets[0];
       const screenPos = this.worldToScreen(target.position);
       this.targetPositions.push(screenPos);
@@ -219,73 +260,148 @@ export class CustomScene extends BaseScene {
     }
   }
 
-  private updateMovingTarget(deltaTime: number) {
-    if (this.targets.length === 0) return;
-
-    const target = this.targets[0];
+  /** 根据运动类型和相位计算目标位置（用于生成和更新） */
+  private getMovementPosition(phase: number): { x: number; y: number } | null {
     const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
-    const speed = this.config.movement.speed;
     const type = this.config.movement.type;
-    const randomness = this.config.movement.randomness ?? 0;
+    const direction = this.config.movement.direction || 'horizontal';
 
-    this.movementPhase += speed * deltaTime / 1000;
-
-    let x: number, y: number;
     const centerX = (bounds.xMin + bounds.xMax) / 2;
     const centerY = (bounds.yMin + bounds.yMax) / 2;
     const radiusX = (bounds.xMax - bounds.xMin) / 2;
     const radiusY = (bounds.yMax - bounds.yMin) / 2;
 
+    let x: number, y: number;
+
     switch (type) {
       case 'circular':
-        x = centerX + Math.cos(this.movementPhase) * radiusX;
-        y = centerY + Math.sin(this.movementPhase) * radiusY;
+        x = centerX + Math.cos(phase) * radiusX;
+        y = centerY + Math.sin(phase) * radiusY;
         break;
 
       case 'sine':
-        x = centerX + Math.cos(this.movementPhase) * radiusX;
-        y = centerY + Math.sin(this.movementPhase * 2) * radiusY;
+        x = centerX + Math.cos(phase) * radiusX;
+        y = centerY + Math.sin(phase * 2) * radiusY;
         break;
 
       case 'figure8':
-        x = centerX + Math.cos(this.movementPhase) * radiusX;
-        y = centerY + Math.sin(this.movementPhase * 2) * radiusY * 0.5;
+        x = centerX + Math.cos(phase) * radiusX;
+        y = centerY + Math.sin(phase * 2) * radiusY * 0.5;
         break;
 
-      case 'linear':
-        // 左右往返
-        const range = radiusX;
-        const t = (this.movementPhase % (2 * Math.PI)) / (2 * Math.PI);
-        x = centerX + (t < 0.5 ? t * 4 - 1 : 3 - t * 4) * range;
-        y = centerY;
-        break;
-
-      case 'random':
-        // 随机移动（简化版）
-        if (!target.metadata?.targetX) {
-          target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
-          target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+      case 'linear': {
+        const t = (phase % (2 * Math.PI)) / (2 * Math.PI);
+        const offset = t < 0.5 ? t * 4 - 1 : 3 - t * 4; // -1 ~ 1 往返
+        switch (direction) {
+          case 'vertical':
+            x = centerX;
+            y = centerY + offset * radiusY;
+            break;
+          case 'diagonal-tl-br':
+            // 左上 ↔ 右下
+            x = centerX + offset * radiusX;
+            y = centerY - offset * radiusY;
+            break;
+          case 'diagonal-tr-bl':
+            // 右上 ↔ 左下
+            x = centerX - offset * radiusX;
+            y = centerY - offset * radiusY;
+            break;
+          default: // 'horizontal'
+            x = centerX + offset * radiusX;
+            y = centerY;
+            break;
         }
-        const dx = target.metadata.targetX - target.position.x;
-        const dy = target.metadata.targetY - target.position.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 0.3) {
-          target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
-          target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
-        }
-        x = target.position.x + (dx / dist) * speed * deltaTime / 500;
-        y = target.position.y + (dy / dist) * speed * deltaTime / 500;
         break;
+      }
 
-      default: // static
-        return;
+      default: // static / random
+        return null;
     }
+
+    return { x, y };
+  }
+
+  /** 获取线性运动的轨道起始方向向量（用于轨道指引线绘制） */
+  private getLinearGuideEndpoints(): [BABYLON.Vector3, BABYLON.Vector3] {
+    const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
+    const direction = this.config.movement.direction || 'horizontal';
+    const centerX = (bounds.xMin + bounds.xMax) / 2;
+    const centerY = (bounds.yMin + bounds.yMax) / 2;
+    const radiusX = (bounds.xMax - bounds.xMin) / 2;
+    const radiusY = (bounds.yMax - bounds.yMin) / 2;
+
+    switch (direction) {
+      case 'vertical':
+        return [
+          new BABYLON.Vector3(centerX, centerY - radiusY, 8),
+          new BABYLON.Vector3(centerX, centerY + radiusY, 8),
+        ];
+      case 'diagonal-tl-br':
+        return [
+          new BABYLON.Vector3(centerX - radiusX, centerY + radiusY, 8),
+          new BABYLON.Vector3(centerX + radiusX, centerY - radiusY, 8),
+        ];
+      case 'diagonal-tr-bl':
+        return [
+          new BABYLON.Vector3(centerX + radiusX, centerY + radiusY, 8),
+          new BABYLON.Vector3(centerX - radiusX, centerY - radiusY, 8),
+        ];
+      default: // 'horizontal'
+        return [
+          new BABYLON.Vector3(centerX - radiusX, centerY, 8),
+          new BABYLON.Vector3(centerX + radiusX, centerY, 8),
+        ];
+    }
+  }
+
+  private updateMovingTarget(deltaTime: number) {
+    if (this.targets.length === 0) return;
+
+    const target = this.targets[0];
+    const speed = this.config.movement.speed;
+    const type = this.config.movement.type;
+    const randomness = this.config.movement.randomness ?? 0;
+    const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
+    const radiusX = (bounds.xMax - bounds.xMin) / 2;
+    const radiusY = (bounds.yMax - bounds.yMin) / 2;
+
+    this.movementPhase += speed * deltaTime / 1000;
+
+    if (type === 'random') {
+      // 随机移动单独处理（需要目标当前位置状态）
+      const centerX = (bounds.xMin + bounds.xMax) / 2;
+      const centerY = (bounds.yMin + bounds.yMax) / 2;
+      if (!target.metadata?.targetX) {
+        target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
+        target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+      }
+      const dx = target.metadata.targetX - target.position.x;
+      const dy = target.metadata.targetY - target.position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 0.3) {
+        target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
+        target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+      }
+      let rx = target.position.x + (dx / dist) * speed * deltaTime / 500;
+      let ry = target.position.y + (dy / dist) * speed * deltaTime / 500;
+      rx = Math.max(bounds.xMin, Math.min(bounds.xMax, rx));
+      ry = Math.max(bounds.yMin, Math.min(bounds.yMax, ry));
+      target.position.x = rx;
+      target.position.y = ry;
+      target.position.z = 8;
+      return;
+    }
+
+    const pos = this.getMovementPosition(this.movementPhase);
+    if (!pos) return;
+
+    let { x, y } = pos;
 
     // 叠加路径噪声（随机度 > 0 时）
     if (randomness > 0) {
       const noiseScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.5;
       const time = this.movementPhase;
-      // 使用多个不同频率的正弦波叠加产生类噪声效果
       const noiseX = (Math.sin(time * 1.7 + 0.3) * 0.4 + Math.sin(time * 3.1 + 1.7) * 0.3 + Math.sin(time * 5.3 + 2.9) * 0.3) * noiseScale;
       const noiseY = (Math.sin(time * 2.3 + 1.1) * 0.4 + Math.sin(time * 4.7 + 0.5) * 0.3 + Math.sin(time * 6.1 + 3.7) * 0.3) * noiseScale;
       x += noiseX;
@@ -302,64 +418,77 @@ export class CustomScene extends BaseScene {
   }
 
   private handleSpawning(now: number) {
-    const { maxActive, interval } = this.config.spawn;
+    const { maxActive } = this.config.spawn;
 
-    // 检查是否需要补充目标
-    if (this.targets.length >= maxActive) return;
+    // 检测场上活跃目标数量（与 GridshotScene 逻辑一致）
+    const missingCount = maxActive - this.targets.length;
 
-    // 检查间隔
-    if (now - this.lastSpawnTime < interval) return;
-
-    // 生成新目标
-    this.spawnRandomTarget();
-    this.lastSpawnTime = now;
+    // 当目标数不足时，优先补充（快速响应，无冷却延迟）
+    if (missingCount > 0 && now - this.lastSpawnTime >= CustomScene.SPAWN_COOLDOWN_MS) {
+      if (this.spawnRandomTarget()) {
+        this.lastSpawnTime = now;
+      }
+      // 如果生成失败（无空格子），不更新 lastSpawnTime，下一帧会重试
+    }
   }
 
-  private spawnRandomTarget() {
-    const { type } = this.config.movement;
+  /** 生成目标，返回是否成功（无空格子时返回 false） */
+  private spawnRandomTarget(): boolean {
     const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
     const display = this.config.display;
+    const actualSize = this.config.target.size;
 
-    let position: BABYLON.Vector3;
-
-    if (type === 'static' && display) {
-      // 网格中随机位置
+    if (this.isStaticType() && display) {
+      // 静态点击类型：使用格子占用追踪（与 GridshotScene 逻辑一致）
       const { rows, cols } = display;
+      const availableCells = this.getAvailableCells(rows, cols);
+
+      if (availableCells.length === 0) return false;
+
+      const [row, col] = availableCells[Math.floor(Math.random() * availableCells.length)];
       const cellWidth = 14 / cols;
       const cellHeight = display.wallHeight / rows;
 
-      const row = Math.floor(Math.random() * rows);
-      const col = Math.floor(Math.random() * cols);
-
       const x = (col - cols / 2 + 0.5) * cellWidth;
       const y = row * cellHeight + 2 + cellHeight / 2;
-      position = new BABYLON.Vector3(x, y, 8);
-    } else {
-      // 运动范围内随机位置
-      const x = bounds.xMin + Math.random() * (bounds.xMax - bounds.xMin);
-      const y = bounds.yMin + Math.random() * (bounds.yMax - bounds.yMin);
-      position = new BABYLON.Vector3(x, y, 8);
-    }
 
-    const actualSize = this.config.target.size;
-    this.spawnTarget(position, actualSize);
+      const mesh = this.spawnTarget(new BABYLON.Vector3(x, y, 8), actualSize);
+      const cellKey = `${row},${col}`;
+      mesh.metadata = { ...mesh.metadata, cellKey };
+      this.occupiedCells.set(cellKey, mesh);
+
+      return true;
+    } else {
+      // 运动类型：根据当前运动状态计算正确位置，避免闪烁
+      const pos = this.getMovementPosition(this.movementPhase);
+      const x = pos ? pos.x : bounds.xMin + Math.random() * (bounds.xMax - bounds.xMin);
+      const y = pos ? pos.y : bounds.yMin + Math.random() * (bounds.yMax - bounds.yMin);
+      const position = new BABYLON.Vector3(x, y, 8);
+
+      try {
+        this.spawnTarget(position, actualSize);
+        return true;
+      } catch {
+        return false;
+      }
+    }
   }
 
   protected calculateScore(): number {
-    if (this.isTrackingType()) {
-      // 跟踪类型计算平滑度
+    // 跟踪类型（category 为 'tracking'）计算平滑度
+    if (this.config.category === 'tracking') {
       if (this.cursorPositions.length < 3) return 0;
       return Math.round(this.trackingScore * 100);
-    } else {
-      // 静态类型计算准确率
-      return super.calculateScore();
     }
+    // 其他类型（静态点击、动态点击、目标切换、反应训练）计算准确率
+    return super.calculateScore();
   }
 
   stop() {
     this.isActive = false;
 
-    if (this.isTrackingType() && this.cursorPositions.length >= 3) {
+    // 跟踪类型计算平滑度
+    if (this.config.category === 'tracking' && this.cursorPositions.length >= 3) {
       this.trackingScore = this.calculateTrackingSmoothness();
     }
 
@@ -432,6 +561,7 @@ export class CustomScene extends BaseScene {
   }
 
   dispose() {
+    this.occupiedCells.clear();
     this.gridLines.forEach(l => l.dispose());
     this.trackGuide?.dispose();
     super.dispose();

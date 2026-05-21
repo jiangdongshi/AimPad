@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useLocale } from '@/hooks/useTheme';
@@ -8,6 +8,7 @@ import { encodeShareCode, decodeShareCode, formatShareCode } from '@/utils/share
 import type {
   SceneConfig,
   MovementType,
+  LinearDirection,
   TaskCategory,
   ScoringWeights,
 } from '@/types/customTask';
@@ -79,11 +80,24 @@ const TRACK_MOVEMENT_TYPES: { value: MovementType; label: string }[] = [
   { value: 'random', label: '随机' },
 ];
 
+// 线性运动方向选项
+const LINEAR_DIRECTIONS: { value: LinearDirection; label: string }[] = [
+  { value: 'horizontal', label: '水平' },
+  { value: 'vertical', label: '垂直' },
+  { value: 'diagonal-tl-br', label: '斜向 ↘' },
+  { value: 'diagonal-tr-bl', label: '斜向 ↙' },
+];
+
 export function CustomTaskEditor() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const locale = useLocale();
-  const { addTask, importFromShareCode } = useCustomTaskStore();
+  const { addTask, updateTask, getTaskById, importFromShareCode } = useCustomTaskStore();
   const configRef = useRef<SceneConfig>(createDefaultSceneConfig());
+
+  // 编辑模式：从 URL 参数 ?edit=<taskId> 读取
+  const editTaskId = searchParams.get('edit');
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(editTaskId);
 
   const TASK_CATEGORIES: { value: TaskCategory; label: string }[] = [
     { value: 'static-clicking', label: locale['taskType.static-clicking'] },
@@ -100,7 +114,26 @@ export function CustomTaskEditor() {
     { value: 0, label: locale['training.duration.unlimited'] },
   ];
 
-  const [config, setConfig] = useState<SceneConfig>(createDefaultSceneConfig());
+  const [config, setConfig] = useState<SceneConfig>(() => {
+    // 编辑模式：加载已有任务配置
+    if (editTaskId) {
+      const existing = getTaskById(editTaskId);
+      if (existing) {
+        return {
+          name: existing.name,
+          description: existing.description,
+          category: existing.category,
+          duration: existing.duration,
+          target: { ...existing.target },
+          movement: { ...existing.movement },
+          spawn: { ...existing.spawn },
+          display: existing.display ? { ...existing.display } : undefined,
+          scoring: { ...existing.scoring },
+        };
+      }
+    }
+    return createDefaultSceneConfig();
+  });
   configRef.current = config;
   const [importCode, setImportCode] = useState('');
   const [shareCode, setShareCode] = useState('');
@@ -180,11 +213,21 @@ export function CustomTaskEditor() {
 
   const handleSave = useCallback(() => {
     if (!config.name.trim()) return;
-    const task = addTask(config);
-    const code = encodeShareCode(config);
-    setShareCode(code);
-    navigate(`/training?custom=${task.id}`);
-  }, [config, addTask, navigate]);
+
+    if (editingTaskId) {
+      // 编辑模式：更新已有任务
+      updateTask(editingTaskId, config);
+      const code = encodeShareCode(config);
+      setShareCode(code);
+      navigate(`/training?custom=${editingTaskId}`);
+    } else {
+      // 创建模式：新建任务
+      const task = addTask(config);
+      const code = encodeShareCode(config);
+      setShareCode(code);
+      navigate(`/training?custom=${task.id}`);
+    }
+  }, [config, editingTaskId, addTask, updateTask, navigate]);
 
   const handleImport = useCallback(() => {
     setImportError('');
@@ -302,6 +345,11 @@ export function CustomTaskEditor() {
                   onChange={(e) => updateTarget({ size: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
               </div>
               <div>
+                <label style={labelStyle}>{locale['custom.maxActive'] || '数量'}: {config.spawn.maxActive}</label>
+                <input type="range" min="1" max="10" step="1" value={config.spawn.maxActive}
+                  onChange={(e) => updateSpawn({ maxActive: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
                 <label style={labelStyle}>{locale['custom.speed'] || '速度'}: {config.movement.speed.toFixed(1)}</label>
                 <input type="range" min="1" max="10" step="0.5" value={config.movement.speed}
                   onChange={(e) => updateMovement({ speed: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
@@ -322,6 +370,24 @@ export function CustomTaskEditor() {
                   ))}
                 </div>
               </div>
+              {config.movement.type === 'linear' && (
+                <div>
+                  <label style={labelStyle}>{locale['custom.direction'] || '运动方向'}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {LINEAR_DIRECTIONS.map(d => (
+                      <button key={d.value} onClick={() => updateMovement({ direction: d.value })}
+                        className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                        style={{
+                          backgroundColor: (config.movement.direction || 'horizontal') === d.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                          color: (config.movement.direction || 'horizontal') === d.value ? '#2563EB' : 'var(--color-text-secondary)',
+                          border: (config.movement.direction || 'horizontal') === d.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                        }}>
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}</label>
                 <input type="range" min="0" max="5000" step="100" value={config.spawn.lifetime}
@@ -364,6 +430,24 @@ export function CustomTaskEditor() {
                   ))}
                 </div>
               </div>
+              {config.movement.type === 'linear' && (
+                <div>
+                  <label style={labelStyle}>{locale['custom.direction'] || '运动方向'}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {LINEAR_DIRECTIONS.map(d => (
+                      <button key={d.value} onClick={() => updateMovement({ direction: d.value })}
+                        className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                        style={{
+                          backgroundColor: (config.movement.direction || 'horizontal') === d.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                          color: (config.movement.direction || 'horizontal') === d.value ? '#2563EB' : 'var(--color-text-secondary)',
+                          border: (config.movement.direction || 'horizontal') === d.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                        }}>
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <label style={labelStyle}>{locale['custom.randomness'] || '随机度'}: {config.movement.randomness ?? 0}%</label>
                 <input type="range" min="0" max="100" step="5" value={config.movement.randomness ?? 0}
@@ -420,6 +504,24 @@ export function CustomTaskEditor() {
                   ))}
                 </div>
               </div>
+              {config.movement.type === 'linear' && (
+                <div>
+                  <label style={labelStyle}>{locale['custom.direction'] || '运动方向'}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {LINEAR_DIRECTIONS.map(d => (
+                      <button key={d.value} onClick={() => updateMovement({ direction: d.value })}
+                        className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                        style={{
+                          backgroundColor: (config.movement.direction || 'horizontal') === d.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                          color: (config.movement.direction || 'horizontal') === d.value ? '#2563EB' : 'var(--color-text-secondary)',
+                          border: (config.movement.direction || 'horizontal') === d.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                        }}>
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}</label>
                 <input type="range" min="0" max="5000" step="100" value={config.spawn.lifetime}
@@ -466,40 +568,45 @@ export function CustomTaskEditor() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-gaming text-text-primary">
-          {locale['custom.title'] || 'Custom Task Editor'}
+          {editingTaskId
+            ? (locale['custom.editTask'] || 'Edit Task')
+            : (locale['custom.title'] || 'Custom Task Editor')
+          }
         </h1>
-        <Button variant="ghost" onClick={() => navigate('/training')}>
+        <Button variant="ghost" onClick={() => navigate('/training?tab=custom')}>
           {locale['result.back'] || 'Back'}
         </Button>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setActiveTab('create')}
-          className="px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
-          style={{
-            backgroundColor: activeTab === 'create' ? '#2563EB' : 'var(--color-bg-surface)',
-            color: activeTab === 'create' ? '#fff' : 'var(--color-text-secondary)',
-            border: activeTab === 'create' ? '1px solid #2563EB' : '1px solid var(--color-border)',
-          }}
-        >
-          {locale['custom.create'] || 'Create Task'}
-        </button>
-        <button
-          onClick={() => setActiveTab('import')}
-          className="px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
-          style={{
-            backgroundColor: activeTab === 'import' ? '#2563EB' : 'var(--color-bg-surface)',
-            color: activeTab === 'import' ? '#fff' : 'var(--color-text-secondary)',
-            border: activeTab === 'import' ? '1px solid #2563EB' : '1px solid var(--color-border)',
-          }}
-        >
-          {locale['custom.import'] || 'Import from Code'}
-        </button>
-      </div>
+      {/* Tab Switcher - 编辑模式下隐藏导入 tab */}
+      {!editingTaskId && (
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('create')}
+            className="px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
+            style={{
+              backgroundColor: activeTab === 'create' ? '#2563EB' : 'var(--color-bg-surface)',
+              color: activeTab === 'create' ? '#fff' : 'var(--color-text-secondary)',
+              border: activeTab === 'create' ? '1px solid #2563EB' : '1px solid var(--color-border)',
+            }}
+          >
+            {locale['custom.create'] || 'Create Task'}
+          </button>
+          <button
+            onClick={() => setActiveTab('import')}
+            className="px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
+            style={{
+              backgroundColor: activeTab === 'import' ? '#2563EB' : 'var(--color-bg-surface)',
+              color: activeTab === 'import' ? '#fff' : 'var(--color-text-secondary)',
+              border: activeTab === 'import' ? '1px solid #2563EB' : '1px solid var(--color-border)',
+            }}
+          >
+            {locale['custom.import'] || 'Import from Code'}
+          </button>
+        </div>
+      )}
 
-      {activeTab === 'import' ? (
+      {!editingTaskId && activeTab === 'import' ? (
         /* Import Section */
         <Card>
           <CardHeader>
@@ -682,7 +789,10 @@ export function CustomTaskEditor() {
             <Card>
               <CardContent className="space-y-3">
                 <Button variant="primary" className="w-full" onClick={handleSave} disabled={!config.name.trim()}>
-                  {locale['custom.saveAndStart'] || 'Save & Start Training'}
+                  {editingTaskId
+                    ? (locale['custom.saveChanges'] || 'Save Changes')
+                    : (locale['custom.saveAndStart'] || 'Save & Start Training')
+                  }
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={handleReset}>
                   {locale['custom.reset'] || 'Reset to Default'}
