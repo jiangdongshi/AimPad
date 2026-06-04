@@ -369,8 +369,9 @@ export function Training() {
     setCountdown(null);
     const canvas = document.querySelector('canvas');
     resetTraining(canvas);
-    navigate('/training');
-  }, [resetTraining, navigate]);
+    // 从自定义任务退出时，带上 tab=custom 参数，确保回到"自定义训练"tab
+    navigate(customTaskId ? '/training?tab=custom' : '/training');
+  }, [resetTraining, navigate, customTaskId]);
 
   // 当 selectedTask 变化时，设置待启动任务
   useEffect(() => {

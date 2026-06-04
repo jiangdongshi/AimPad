@@ -52,9 +52,10 @@ export class CustomScene extends BaseScene {
   private gridLines: BABYLON.LinesMesh[] = [];
   private trackGuide: BABYLON.LinesMesh | null = null;
   private lastSpawnTime: number = 0;
-  private cursorPositions: { x: number; y: number }[] = [];
-  private targetPositions: { x: number; y: number }[] = [];
-  private trackingScore: number = 0;
+
+  // 追踪类实时计分（与球体追踪/平移追踪一致：准星靠近目标即计分）
+  private realtimeScore: number = 0;
+  private readonly TRACK_THRESHOLD = 100; // 屏幕像素阈值
 
   // 运动相关状态
   private movementPhase: number = 0;
@@ -89,6 +90,25 @@ export class CustomScene extends BaseScene {
     for (let i = 0; i < this.config.spawn.maxActive; i++) {
       this.spawnRandomTarget();
     }
+  }
+
+  start() {
+    this.realtimeScore = 0;
+    this.resetStats();
+    this.startTime = performance.now();
+    this.isActive = true;
+    this.lastTargetSpawnTime = this.startTime;
+
+    // 追踪类型使用准星重叠实时计分，不启用射击逻辑
+    if (this.config.category !== 'tracking') {
+      this.setupShooting();
+    }
+  }
+
+  protected tryShoot() {
+    // 追踪类不响应点击射击，仅靠准星接近累计计分
+    if (this.config.category === 'tracking') return false;
+    return super.tryShoot();
   }
 
   private createDisplayElements() {
@@ -242,15 +262,25 @@ export class CustomScene extends BaseScene {
     // 生成新目标
     this.handleSpawning(now);
 
-    // 记录跟踪数据（仅跟踪类型需要，用于计算平滑度）
+    // 追踪类型：实时累计追踪得分（准星与目标距离越近得分越高，与球体追踪/平移追踪一致）
     if (this.config.category === 'tracking' && this.targets.length > 0) {
       const target = this.targets[0];
       const screenPos = this.worldToScreen(target.position);
-      this.targetPositions.push(screenPos);
-      this.cursorPositions.push({
-        x: this.scene.pointerX,
-        y: this.scene.pointerY,
-      });
+
+      // 准星固定在屏幕中央
+      const renderWidth = this.scene.getEngine().getRenderWidth();
+      const renderHeight = this.scene.getEngine().getRenderHeight();
+      const crosshairX = renderWidth / 2;
+      const crosshairY = renderHeight / 2;
+
+      const dx = crosshairX - screenPos.x;
+      const dy = crosshairY - screenPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < this.TRACK_THRESHOLD) {
+        const normalizedScore = 1 - distance / this.TRACK_THRESHOLD;
+        this.realtimeScore += normalizedScore * (deltaTime / 1000) * 100;
+      }
     }
 
     // 检查训练时间
@@ -475,26 +505,49 @@ export class CustomScene extends BaseScene {
   }
 
   protected calculateScore(): number {
-    // 跟踪类型（category 为 'tracking'）计算平滑度
+    // 追踪类型使用准星接近实时累计计分
     if (this.config.category === 'tracking') {
-      if (this.cursorPositions.length < 3) return 0;
-      return Math.round(this.trackingScore * 100);
+      return Math.round(this.realtimeScore);
     }
     // 其他类型（静态点击、动态点击、目标切换、反应训练）计算准确率
     return super.calculateScore();
   }
 
+  getStats() {
+    if (this.config.category === 'tracking') {
+      return {
+        hits: 0,
+        misses: 0,
+        reactionTimes: [],
+        realtimeScore: this.realtimeScore,
+        isTracking: true,
+      };
+    }
+    return super.getStats();
+  }
+
   stop() {
     this.isActive = false;
-
-    // 跟踪类型计算平滑度
-    if (this.config.category === 'tracking' && this.cursorPositions.length >= 3) {
-      this.trackingScore = this.calculateTrackingSmoothness();
-    }
 
     const avgReaction = this.reactionTimes.length > 0
       ? this.reactionTimes.reduce((a, b) => a + b, 0) / this.reactionTimes.length
       : 0;
+
+    // 追踪类型不展示命中/脱靶
+    if (this.config.category === 'tracking') {
+      return {
+        id: `${this.taskId}-${Date.now()}`,
+        taskId: this.taskId,
+        timestamp: Date.now(),
+        score: this.calculateScore(),
+        accuracy: 0,
+        reactionTime: 0,
+        reactionTimes: [],
+        kills: 0,
+        misses: 0,
+        duration: performance.now() - this.startTime,
+      };
+    }
 
     return {
       id: `${this.taskId}-${Date.now()}`,
@@ -510,35 +563,6 @@ export class CustomScene extends BaseScene {
       misses: this.misses,
       duration: performance.now() - this.startTime,
     };
-  }
-
-  private calculateTrackingSmoothness(): number {
-    if (this.cursorPositions.length < 3 || this.targetPositions.length < 3) return 0;
-
-    // 计算 jerk（加加速度）
-    let totalJerk = 0;
-    const minLen = Math.min(this.cursorPositions.length, this.targetPositions.length);
-
-    for (let i = 2; i < minLen; i++) {
-      const dx1 = this.cursorPositions[i - 1].x - this.cursorPositions[i - 2].x;
-      const dy1 = this.cursorPositions[i - 1].y - this.cursorPositions[i - 2].y;
-      const dx2 = this.cursorPositions[i].x - this.cursorPositions[i - 1].x;
-      const dy2 = this.cursorPositions[i].y - this.cursorPositions[i - 1].y;
-      const jerk = Math.sqrt((dx2 - dx1) ** 2 + (dy2 - dy1) ** 2);
-      totalJerk += jerk;
-    }
-
-    // 计算跟踪误差
-    let totalError = 0;
-    for (let i = 0; i < minLen; i++) {
-      const dx = this.cursorPositions[i].x - this.targetPositions[i].x;
-      const dy = this.cursorPositions[i].y - this.targetPositions[i].y;
-      totalError += Math.sqrt(dx * dx + dy * dy);
-    }
-    const avgError = totalError / minLen;
-
-    // 计算平滑度分数
-    return Math.max(0, 100 / (1 + totalJerk * 0.1 + avgError * 0.05));
   }
 
   private worldToScreen(worldPos: BABYLON.Vector3): { x: number; y: number } {
