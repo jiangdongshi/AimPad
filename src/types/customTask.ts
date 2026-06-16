@@ -42,12 +42,17 @@ export interface MovementBounds {
 // 线性运动方向
 export type LinearDirection = 'horizontal' | 'vertical' | 'diagonal-tl-br' | 'diagonal-tr-bl';
 
+// 随机运动子模式
+export type RandomMode = 'brief' | 'full';
+
 // 运动配置
 export interface MovementConfig {
   type: MovementType;
   speed: number;          // 1 ~ 10
   randomness?: number;    // 0 ~ 100, 路径噪声强度（跟踪训练用）
   direction?: LinearDirection;  // 线性运动方向（仅 linear 类型使用）
+  randomMode?: RandomMode;      // 随机运动子模式：'brief'=短暂随机, 'full'=完全随机（默认）
+  randomLinearRatio?: number;   // 0.1 ~ 0.9, 短暂随机模式下随机阶段占比（默认 0.5）
   pattern?: MovementPattern;
   bounds?: MovementBounds;
 }

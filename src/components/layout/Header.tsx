@@ -1,14 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useLocale } from '@/hooks/useTheme';
-import { useAuthStore } from '@/stores/authStore';
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
-import { UserMenu } from '@/components/ui/UserMenu';
+import { ProfileMenu } from '@/components/layout/ProfileMenu';
 
 export function Header() {
   const location = useLocation();
   const locale = useLocale();
-  const { user, isAuthenticated, logout } = useAuthStore();
 
   const navItems = [
     { path: '/', label: locale['nav.home'] },
@@ -17,9 +15,6 @@ export function Header() {
     { path: '/custom-task', label: locale['nav.customTask'] || 'Custom' },
     { path: '/statistics', label: locale['nav.statistics'] },
     { path: '/settings', label: locale['nav.settings'] },
-    ...(isAuthenticated && user?.role === 'admin'
-      ? [{ path: '/admin', label: locale['nav.admin'] || 'Admin' }]
-      : []),
   ];
 
   return (
@@ -31,7 +26,7 @@ export function Header() {
           <div className="text-xs text-text-secondary hidden sm:block">{locale['header.subtitle']}</div>
         </Link>
 
-        {/* 导航 + 语言/主题切换 */}
+        {/* Navigation + Profile + Switchers */}
         <div className="flex items-center gap-3">
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
@@ -54,17 +49,8 @@ export function Header() {
             })}
           </nav>
 
-          {/* Auth section */}
-          {isAuthenticated && user ? (
-            <UserMenu user={user} onLogout={logout} />
-          ) : (
-            <Link
-              to="/login"
-              className="px-3 py-1.5 rounded-md text-sm font-display bg-accent hover:bg-accent-dark text-surface-900 font-semibold transition-colors"
-            >
-              {locale['auth.login']}
-            </Link>
-          )}
+          {/* Profile */}
+          <ProfileMenu />
 
           <LanguageSwitcher />
           <ThemeSwitcher />

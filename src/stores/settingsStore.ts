@@ -1,49 +1,41 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ThemeId } from '@/types/theme';
-import { settingsApi, type ServerSettings } from '@/api/settings';
 
 export type LocaleId = 'en' | 'zh';
-export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface SettingsState {
-  // 主题设置
+  // Theme
   theme: ThemeId;
 
-  // 语言设置
+  // Language
   locale: LocaleId;
 
-  // 手柄设置
+  // Gamepad
   leftDeadzone: number;
   rightDeadzone: number;
   gamepadSensitivity: number;
   gamepadInvertY: boolean;
   gamepadFireButton: string;
 
-  // 鼠标设置
+  // Mouse
   mouseSensitivity: number;
   mouseInvertY: boolean;
 
-  // 显示设置
+  // Display
   crosshairStyle: 'dot' | 'cross' | 'circle';
   crosshairColor: string;
   crosshairSize: number;
   fov: number;
   quality: 'low' | 'medium' | 'high' | 'ultra';
 
-  // 音效设置
+  // Sound
   soundEnabled: boolean;
   soundVolume: number;
 
-  // 同步状态
-  syncStatus: SyncStatus;
-  lastSyncedAt: string | null;
-
-  // 操作
+  // Actions
   updateSettings: (partial: Partial<SettingsState>) => void;
   resetToDefaults: () => void;
-  loadFromServer: () => Promise<void>;
-  syncToServer: () => Promise<void>;
 }
 
 const DEFAULT_SETTINGS = {
@@ -65,99 +57,24 @@ const DEFAULT_SETTINGS = {
   soundVolume: 0.7,
 };
 
-/** 从服务器设置对象中提取可合并到 store 的字段 */
-function pickSettings(server: ServerSettings) {
-  return {
-    theme: server.theme as ThemeId,
-    locale: server.locale as LocaleId,
-    crosshairStyle: server.crosshairStyle as 'dot' | 'cross' | 'circle',
-    crosshairColor: server.crosshairColor,
-    crosshairSize: server.crosshairSize,
-    fov: server.fov,
-    quality: server.quality as 'low' | 'medium' | 'high' | 'ultra',
-    soundEnabled: server.soundEnabled,
-    soundVolume: server.soundVolume,
-    gamepadDeadzone: server.gamepadDeadzone,
-    leftDeadzone: (server as any).leftDeadzone ?? server.gamepadDeadzone ?? 0.1,
-    rightDeadzone: (server as any).rightDeadzone ?? server.gamepadDeadzone ?? 0.1,
-    gamepadSensitivity: server.gamepadSensitivity,
-    gamepadInvertY: server.gamepadInvertY,
-    gamepadFireButton: server.gamepadFireButton,
-    mouseSensitivity: server.mouseSensitivity,
-    mouseInvertY: server.mouseInvertY,
-  };
-}
-
-/** 从当前 store 状态中提取需要同步到服务器的字段 (snake_case) */
-function toServerPayload(state: SettingsState) {
-  return {
-    theme: state.theme,
-    locale: state.locale,
-    crosshair_style: state.crosshairStyle,
-    crosshair_color: state.crosshairColor,
-    crosshair_size: state.crosshairSize,
-    fov: state.fov,
-    quality: state.quality,
-    sound_enabled: state.soundEnabled ? 1 : 0,
-    sound_volume: state.soundVolume,
-    left_deadzone: state.leftDeadzone,
-    right_deadzone: state.rightDeadzone,
-    gamepad_sensitivity: state.gamepadSensitivity,
-    gamepad_invert_y: state.gamepadInvertY ? 1 : 0,
-    gamepad_fire_button: state.gamepadFireButton,
-    mouse_sensitivity: state.mouseSensitivity,
-    mouse_invert_y: state.mouseInvertY ? 1 : 0,
-  };
-}
-
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...DEFAULT_SETTINGS,
-      syncStatus: 'idle' as SyncStatus,
-      lastSyncedAt: null as string | null,
 
       updateSettings: (partial) => {
         set((state) => ({ ...state, ...partial }));
       },
 
       resetToDefaults: () => {
-        set({ ...DEFAULT_SETTINGS, syncStatus: 'idle', lastSyncedAt: get().lastSyncedAt });
-      },
-
-      loadFromServer: async () => {
-        try {
-          const { settings } = await settingsApi.get();
-          if (settings) {
-            set({
-              ...pickSettings(settings),
-              syncStatus: 'saved',
-              lastSyncedAt: settings.updatedAt,
-            });
-          }
-        } catch {
-          // 静默失败，使用本地缓存
-          console.warn('[settings] Failed to load from server, using local cache');
-        }
-      },
-
-      syncToServer: async () => {
-        const state = get();
-        set({ syncStatus: 'saving' });
-        try {
-          const { settings } = await settingsApi.update(toServerPayload(state));
-          set({ syncStatus: 'saved', lastSyncedAt: settings.updatedAt });
-        } catch {
-          set({ syncStatus: 'error' });
-          console.warn('[settings] Failed to sync to server');
-        }
+        set({ ...DEFAULT_SETTINGS });
       },
     }),
     {
-      name: 'aimpad-settings',
+      name: 'aimpad_settings',
       merge: (persisted: unknown, current) => {
         const p = persisted as Record<string, unknown> | null;
-        // 迁移旧版 gamepadDeadzone → leftDeadzone / rightDeadzone
+        // Migrate legacy gamepadDeadzone → leftDeadzone / rightDeadzone
         const legacyDeadzone = p?.gamepadDeadzone as number | undefined;
         return {
           ...current,
@@ -183,9 +100,7 @@ export const useSettingsStore = create<SettingsState>()(
         quality: state.quality,
         soundEnabled: state.soundEnabled,
         soundVolume: state.soundVolume,
-        lastSyncedAt: state.lastSyncedAt,
       }),
     }
   )
 );
-
