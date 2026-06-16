@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useAuthStore } from '@/stores/authStore';
+import { exportAllData, importData, getStorageSize } from '@/utils/dataExport';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useLocale } from '@/hooks/useTheme';
 import { THEMES } from '@/types/theme';
 import type { ThemeId } from '@/types/theme';
+import type { ImportResult } from '@/types/profile';
 
 const FIRE_BUTTON_OPTIONS: { value: string; label: string }[] = [
   { value: 'RT', label: 'RT' },
@@ -17,6 +18,12 @@ const FIRE_BUTTON_OPTIONS: { value: string; label: string }[] = [
   { value: 'X', label: 'X (□)' },
   { value: 'Y', label: 'Y (△)' },
 ];
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export function Settings() {
   const {
@@ -35,19 +42,16 @@ export function Settings() {
     quality,
     soundEnabled,
     soundVolume,
-    syncStatus,
-    lastSyncedAt,
     updateSettings,
     resetToDefaults,
-    syncToServer,
-    loadFromServer,
   } = useSettingsStore();
 
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const locale = useLocale();
   const isZh = localeId === 'zh';
 
   const [showFireButtonPopup, setShowFireButtonPopup] = useState(false);
+  const [storageSize, setStorageSize] = useState<{ indexedDB: number; localStorage: number } | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const handleOutsideClick = useCallback((e: MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -73,46 +77,45 @@ export function Settings() {
     };
   }, [showFireButtonPopup, handleOutsideClick, handleEscape]);
 
-  const syncStatusText = {
-    idle: '',
-    saving: locale['settings.syncing'],
-    saved: locale['settings.synced'],
-    error: locale['settings.syncError'],
-  }[syncStatus];
+  const handleRefreshStorage = useCallback(async () => {
+    const size = await getStorageSize();
+    setStorageSize(size);
+  }, []);
+
+  const handleExport = useCallback(async () => {
+    const json = await exportAllData();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const date = new Date().toISOString().slice(0, 10);
+    a.download = `AimPad_backup_${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleImport = useCallback(async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const result = await importData(text);
+      setImportResult(result);
+      setTimeout(() => setImportResult(null), 5000);
+    };
+    input.click();
+  }, []);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-gaming text-text-primary">{locale['settings.title']}</h1>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={resetToDefaults}>
-            {locale['settings.resetDefaults']}
-          </Button>
-          {isAuthenticated && (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={loadFromServer}>
-                {locale['settings.loadFromCloud']}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={syncToServer} disabled={syncStatus === 'saving'}>
-                {locale['settings.saveToCloud']}
-              </Button>
-              {syncStatus !== 'idle' && (
-                <span className={`text-xs ${
-                  syncStatus === 'saved' ? 'text-green-400' :
-                  syncStatus === 'error' ? 'text-red-400' :
-                  'text-text-muted'
-                }`}>
-                  {syncStatusText}
-                </span>
-              )}
-              {lastSyncedAt && syncStatus === 'saved' && (
-                <span className="text-xs text-text-muted">
-                  {new Date(lastSyncedAt).toLocaleTimeString()}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        <Button variant="ghost" size="sm" onClick={resetToDefaults}>
+          {locale['settings.resetDefaults']}
+        </Button>
       </div>
 
       <style>{`
@@ -124,7 +127,7 @@ export function Settings() {
         }
       `}</style>
       <div className="space-y-6">
-        {/* 主题设置 */}
+        {/* Theme */}
         <Card>
           <CardHeader>
             <CardTitle>{locale['theme.switch']}</CardTitle>
@@ -193,7 +196,7 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        {/* 手柄设置 */}
+        {/* Gamepad Settings */}
         <Card>
           <CardHeader>
             <CardTitle>{locale['settings.gamepad']}</CardTitle>
@@ -313,7 +316,7 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        {/* 鼠标设置 */}
+        {/* Mouse Settings */}
         <Card>
           <CardHeader>
             <CardTitle>{locale['settings.mouse']}</CardTitle>
@@ -348,7 +351,7 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        {/* 准星设置 */}
+        {/* Crosshair Settings */}
         <Card>
           <CardHeader>
             <CardTitle>{locale['settings.crosshair']}</CardTitle>
@@ -426,7 +429,7 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        {/* 显示设置 */}
+        {/* Display Settings */}
         <Card>
           <CardHeader>
             <CardTitle>{locale['settings.display']}</CardTitle>
@@ -452,7 +455,7 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        {/* 音效设置 */}
+        {/* Sound Settings */}
         <Card>
           <CardHeader>
             <CardTitle>{locale['settings.sound']}</CardTitle>
@@ -486,6 +489,63 @@ export function Settings() {
                 />
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Data Management */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{locale['profile.dataManagement']}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Storage Info */}
+            <div>
+              <Button variant="ghost" size="sm" onClick={handleRefreshStorage}>
+                {storageSize ? locale['profile.refresh'] : locale['profile.showStorage']}
+              </Button>
+              {storageSize && (
+                <div className="mt-2 space-y-1 text-sm">
+                  <div className="flex justify-between max-w-xs">
+                    <span className="text-text-secondary">{locale['profile.indexedDB']}:</span>
+                    <span className="text-text-primary">{formatBytes(storageSize.indexedDB)}</span>
+                  </div>
+                  <div className="flex justify-between max-w-xs">
+                    <span className="text-text-secondary">{locale['profile.localStorage']}:</span>
+                    <span className="text-text-primary">{formatBytes(storageSize.localStorage)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Export/Import */}
+            <div className="flex flex-wrap gap-3">
+              <Button variant="secondary" size="sm" onClick={handleExport}>
+                {locale['profile.exportData']}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleImport}>
+                {locale['profile.importData']}
+              </Button>
+            </div>
+
+            {importResult && (
+              <div
+                className={`p-3 rounded-lg text-sm ${
+                  importResult.imported
+                    ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                }`}
+              >
+                {importResult.imported
+                  ? locale['profile.importSuccess']
+                      .replace('{records}', String(importResult.recordCount))
+                      .replace('{tasks}', String(importResult.taskCount))
+                  : locale['profile.importFailed'].replace('{error}', importResult.error || 'Unknown error')}
+              </div>
+            )}
+
+            <p className="text-xs text-text-muted">
+              {locale['profile.exportHint']}
+            </p>
           </CardContent>
         </Card>
       </div>

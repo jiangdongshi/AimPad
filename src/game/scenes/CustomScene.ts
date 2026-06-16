@@ -232,8 +232,8 @@ export class CustomScene extends BaseScene {
 
     const now = performance.now();
 
-    // 更新移动目标位置（动态点击和跟踪类型都需要）
-    if (this.isTrackingType()) {
+    // 更新移动目标位置（动态点击和跟踪类型都需要，random 类型也需要）
+    if (this.isTrackingType() || this.config.movement.type === 'random') {
       this.updateMovingTarget(deltaTime);
     }
 
@@ -395,29 +395,222 @@ export class CustomScene extends BaseScene {
       return;
     }
 
+    // 动态点击 + 随机：所有目标各自独立随机移动
+    if (this.config.category === 'dynamic-clicking' && type === 'random') {
+      const centerX = (bounds.xMin + bounds.xMax) / 2;
+      const centerY = (bounds.yMin + bounds.yMax) / 2;
+      const randomMode = this.config.movement.randomMode || 'full';
+      const ratio = this.config.movement.randomLinearRatio ?? 0.5;
+      const cycleDuration = 2000 / speed;
+      const randomDuration = cycleDuration * ratio;
+      const linearDuration = cycleDuration * (1 - ratio);
+      const targetSize = this.config.target.size;
+      const waypointMinDist = targetSize * 3;
+
+      const pickSeparatedWaypoint = (current: BABYLON.Mesh): { wx: number; wy: number } => {
+        const maxRetries = 10;
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          const wx = centerX + (Math.random() - 0.5) * radiusX * 2;
+          const wy = centerY + (Math.random() - 0.5) * radiusY * 2;
+          let tooClose = false;
+          for (const other of this.targets) {
+            if (other === current) continue;
+            const otx = (other.metadata?.targetX as number) ?? other.position.x;
+            const oty = (other.metadata?.targetY as number) ?? other.position.y;
+            const d = Math.sqrt((wx - otx) ** 2 + (wy - oty) ** 2);
+            if (d < waypointMinDist) { tooClose = true; break; }
+          }
+          if (!tooClose) return { wx, wy };
+        }
+        return { wx: centerX + (Math.random() - 0.5) * radiusX * 2, wy: centerY + (Math.random() - 0.5) * radiusY * 2 };
+      };
+
+      for (const target of this.targets) {
+        if (!target.metadata) target.metadata = {};
+
+        if (randomMode === 'brief') {
+          // 短暂随机：随机移动 ↔ 直线移动交替
+          const phase = (target.metadata.randomPhase as string) || 'random';
+          const elapsed = (target.metadata.randomPhaseElapsed as number) || 0;
+          const newElapsed = elapsed + deltaTime;
+
+          if (phase === 'random') {
+            // 随机阶段：waypoint-chasing
+            if (!target.metadata.targetX) {
+              const wp = pickSeparatedWaypoint(target);
+              target.metadata.targetX = wp.wx;
+              target.metadata.targetY = wp.wy;
+            }
+            const dx = (target.metadata.targetX as number) - target.position.x;
+            const dy = (target.metadata.targetY as number) - target.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 0.3) {
+              const wp = pickSeparatedWaypoint(target);
+              target.metadata.targetX = wp.wx;
+              target.metadata.targetY = wp.wy;
+            }
+            if (dist > 0.01) {
+              target.position.x += (dx / dist) * speed * deltaTime / 500;
+              target.position.y += (dy / dist) * speed * deltaTime / 500;
+            }
+
+            if (newElapsed >= randomDuration) {
+              const dirDist = dist > 0.01 ? dist : 1;
+              target.metadata.linearDirX = dx / dirDist;
+              target.metadata.linearDirY = dy / dirDist;
+              target.metadata.randomPhase = 'linear';
+              target.metadata.randomPhaseElapsed = 0;
+            } else {
+              target.metadata.randomPhaseElapsed = newElapsed;
+            }
+          } else {
+            // 直线阶段：沿固定方向匀速移动
+            const ldx = (target.metadata.linearDirX as number) || 1;
+            const ldy = (target.metadata.linearDirY as number) || 0;
+            target.position.x += ldx * speed * deltaTime / 500;
+            target.position.y += ldy * speed * deltaTime / 500;
+
+            if (newElapsed >= linearDuration) {
+              const wp = pickSeparatedWaypoint(target);
+              target.metadata.targetX = wp.wx;
+              target.metadata.targetY = wp.wy;
+              target.metadata.randomPhase = 'random';
+              target.metadata.randomPhaseElapsed = 0;
+            } else {
+              target.metadata.randomPhaseElapsed = newElapsed;
+            }
+          }
+        } else {
+          // 完全随机：纯 waypoint-chasing
+          if (!target.metadata.targetX) {
+            const wp = pickSeparatedWaypoint(target);
+            target.metadata.targetX = wp.wx;
+            target.metadata.targetY = wp.wy;
+          }
+          const dx = (target.metadata.targetX as number) - target.position.x;
+          const dy = (target.metadata.targetY as number) - target.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 0.3) {
+            const wp = pickSeparatedWaypoint(target);
+            target.metadata.targetX = wp.wx;
+            target.metadata.targetY = wp.wy;
+          }
+          if (dist > 0.01) {
+            target.position.x += (dx / dist) * speed * deltaTime / 500;
+            target.position.y += (dy / dist) * speed * deltaTime / 500;
+          }
+        }
+
+        // 叠加路径噪声（随机度 > 0 时）
+        if (randomness > 0) {
+          const noiseScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.5;
+          const noiseTime = this.movementPhase + ((target.metadata?.phaseOffset as number) ?? 0);
+          const noiseX = (Math.sin(noiseTime * 1.7 + 0.3) * 0.4 + Math.sin(noiseTime * 3.1 + 1.7) * 0.3 + Math.sin(noiseTime * 5.3 + 2.9) * 0.3) * noiseScale;
+          const noiseY = (Math.sin(noiseTime * 2.3 + 1.1) * 0.4 + Math.sin(noiseTime * 4.7 + 0.5) * 0.3 + Math.sin(noiseTime * 6.1 + 3.7) * 0.3) * noiseScale;
+          target.position.x += noiseX;
+          target.position.y += noiseY;
+        }
+
+        // 限制在边界内
+        target.position.x = Math.max(bounds.xMin, Math.min(bounds.xMax, target.position.x));
+        target.position.y = Math.max(bounds.yMin, Math.min(bounds.yMax, target.position.y));
+        target.position.z = 8;
+      }
+      return;
+    }
+
     const target = this.targets[0];
 
     if (type === 'random') {
-      // 随机移动单独处理（需要目标当前位置状态）
+      // 追踪类型的随机移动（单目标，支持短暂随机/完全随机）
       const centerX = (bounds.xMin + bounds.xMax) / 2;
       const centerY = (bounds.yMin + bounds.yMax) / 2;
-      if (!target.metadata?.targetX) {
-        target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
-        target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+      const randomMode = this.config.movement.randomMode || 'full';
+      const ratio = this.config.movement.randomLinearRatio ?? 0.5;
+      const cycleDuration = 2000 / speed;
+      const randomDuration = cycleDuration * ratio;
+      const linearDuration = cycleDuration * (1 - ratio);
+
+      if (!target.metadata) target.metadata = {};
+
+      if (randomMode === 'brief') {
+        // 短暂随机：随机移动 ↔ 直线移动交替
+        const phase = (target.metadata.randomPhase as string) || 'random';
+        const elapsed = (target.metadata.randomPhaseElapsed as number) || 0;
+        const newElapsed = elapsed + deltaTime;
+
+        if (phase === 'random') {
+          if (!target.metadata.targetX) {
+            target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
+            target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+          }
+          const dx = (target.metadata.targetX as number) - target.position.x;
+          const dy = (target.metadata.targetY as number) - target.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 0.3) {
+            target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
+            target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+          }
+          if (dist > 0.01) {
+            target.position.x += (dx / dist) * speed * deltaTime / 500;
+            target.position.y += (dy / dist) * speed * deltaTime / 500;
+          }
+
+          if (newElapsed >= randomDuration) {
+            const dirDist = dist > 0.01 ? dist : 1;
+            target.metadata.linearDirX = dx / dirDist;
+            target.metadata.linearDirY = dy / dirDist;
+            target.metadata.randomPhase = 'linear';
+            target.metadata.randomPhaseElapsed = 0;
+          } else {
+            target.metadata.randomPhaseElapsed = newElapsed;
+          }
+        } else {
+          const ldx = (target.metadata.linearDirX as number) || 1;
+          const ldy = (target.metadata.linearDirY as number) || 0;
+          target.position.x += ldx * speed * deltaTime / 500;
+          target.position.y += ldy * speed * deltaTime / 500;
+
+          if (newElapsed >= linearDuration) {
+            target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
+            target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+            target.metadata.randomPhase = 'random';
+            target.metadata.randomPhaseElapsed = 0;
+          } else {
+            target.metadata.randomPhaseElapsed = newElapsed;
+          }
+        }
+      } else {
+        // 完全随机：纯 waypoint-chasing
+        if (!target.metadata.targetX) {
+          target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
+          target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+        }
+        const dx = (target.metadata.targetX as number) - target.position.x;
+        const dy = (target.metadata.targetY as number) - target.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 0.3) {
+          target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
+          target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+        }
+        if (dist > 0.01) {
+          target.position.x += (dx / dist) * speed * deltaTime / 500;
+          target.position.y += (dy / dist) * speed * deltaTime / 500;
+        }
       }
-      const dx = target.metadata.targetX - target.position.x;
-      const dy = target.metadata.targetY - target.position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 0.3) {
-        target.metadata.targetX = centerX + (Math.random() - 0.5) * radiusX * 2;
-        target.metadata.targetY = centerY + (Math.random() - 0.5) * radiusY * 2;
+
+      // 叠加路径噪声（随机度 > 0 时）
+      if (randomness > 0) {
+        const noiseScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.5;
+        const noiseTime = this.movementPhase;
+        const noiseX = (Math.sin(noiseTime * 1.7 + 0.3) * 0.4 + Math.sin(noiseTime * 3.1 + 1.7) * 0.3 + Math.sin(noiseTime * 5.3 + 2.9) * 0.3) * noiseScale;
+        const noiseY = (Math.sin(noiseTime * 2.3 + 1.1) * 0.4 + Math.sin(noiseTime * 4.7 + 0.5) * 0.3 + Math.sin(noiseTime * 6.1 + 3.7) * 0.3) * noiseScale;
+        target.position.x += noiseX;
+        target.position.y += noiseY;
       }
-      let rx = target.position.x + (dx / dist) * speed * deltaTime / 500;
-      let ry = target.position.y + (dy / dist) * speed * deltaTime / 500;
-      rx = Math.max(bounds.xMin, Math.min(bounds.xMax, rx));
-      ry = Math.max(bounds.yMin, Math.min(bounds.yMax, ry));
-      target.position.x = rx;
-      target.position.y = ry;
+
+      target.position.x = Math.max(bounds.xMin, Math.min(bounds.xMax, target.position.x));
+      target.position.y = Math.max(bounds.yMin, Math.min(bounds.yMax, target.position.y));
       target.position.z = 8;
       return;
     }
@@ -520,6 +713,8 @@ export class CustomScene extends BaseScene {
 
       let x: number, y: number;
       let phaseOffset: number | undefined;
+      let baseX: number | undefined;
+      let baseY: number | undefined;
 
       if (this.config.category === 'dynamic-clicking' && type === 'linear' && direction === 'horizontal') {
         // 动态点击 + 水平移动：每个目标分配不同 y 高度和独立相位偏移
@@ -566,20 +761,131 @@ export class CustomScene extends BaseScene {
         const pos = this.getMovementPosition(this.movementPhase + phaseOffset);
         x = pos ? pos.x : (bounds.xMin + bounds.xMax) / 2;
         y = chosenY;
+        baseY = chosenY;
+
+      } else if (this.config.category === 'dynamic-clicking' && type === 'linear' && direction === 'vertical') {
+        // 动态点击 + 垂直移动：每个目标分配不同 x 位置和独立相位偏移
+        const rangeX = bounds.xMax - bounds.xMin;
+
+        // 收集已占用的 x 值
+        const occupiedX: number[] = [];
+        for (const t of this.targets) {
+          if (t.metadata?.baseX !== undefined) {
+            occupiedX.push(t.metadata.baseX as number);
+          }
+        }
+
+        // 在范围内均匀分布候选 x 位置
+        const maxTargets = this.config.spawn.maxActive;
+        const candidateXs: number[] = [];
+        const step = rangeX / (maxTargets + 1);
+        for (let i = 1; i <= maxTargets; i++) {
+          candidateXs.push(bounds.xMin + i * step);
+        }
+
+        // 随机打乱候选位置
+        for (let i = candidateXs.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [candidateXs[i], candidateXs[j]] = [candidateXs[j], candidateXs[i]];
+        }
+
+        // 选第一个未被占用且间距足够的
+        let chosenX: number | null = null;
+        for (const cx of candidateXs) {
+          const tooClose = occupiedX.some(ox => Math.abs(cx - ox) < minSpacing);
+          if (!tooClose) {
+            chosenX = cx;
+            break;
+          }
+        }
+
+        if (chosenX === null) {
+          chosenX = bounds.xMin + Math.random() * rangeX;
+        }
+
+        // 预先生成相位偏移，确保初始位置与运动路径一致
+        phaseOffset = Math.random() * Math.PI * 2;
+        const pos = this.getMovementPosition(this.movementPhase + phaseOffset);
+        x = chosenX;
+        y = pos ? pos.y : (bounds.yMin + bounds.yMax) / 2;
+        baseX = chosenX;
+
       } else {
-        const pos = this.getMovementPosition(this.movementPhase);
+        // 其他运动类型（random 等）：随机位置 + 距离防重叠
+        phaseOffset = Math.random() * Math.PI * 2;
+        const pos = this.getMovementPosition(this.movementPhase + phaseOffset);
         x = pos ? pos.x : bounds.xMin + Math.random() * (bounds.xMax - bounds.xMin);
         y = pos ? pos.y : bounds.yMin + Math.random() * (bounds.yMax - bounds.yMin);
+
+        // 尝试多次寻找不重叠的位置
+        const maxAttempts = 20;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          let overlaps = false;
+          for (const t of this.targets) {
+            const dx = x - t.position.x;
+            const dy = y - t.position.y;
+            if (Math.sqrt(dx * dx + dy * dy) < minSpacing) {
+              overlaps = true;
+              break;
+            }
+          }
+          if (!overlaps) break;
+          // 重新随机位置
+          x = bounds.xMin + Math.random() * (bounds.xMax - bounds.xMin);
+          y = bounds.yMin + Math.random() * (bounds.yMax - bounds.yMin);
+        }
+      }
+
+      // 最终防重叠校验：确保与所有已存在目标有足够间距
+      const minDist = actualSize; // 球心距 >= 直径 = 不重叠
+      let hasOverlap = false;
+      for (const t of this.targets) {
+        const dx = x - t.position.x;
+        const dy = y - t.position.y;
+        if (Math.sqrt(dx * dx + dy * dy) < minDist) {
+          hasOverlap = true;
+          break;
+        }
+      }
+
+      // 如果仍然重叠，尝试微调位置
+      if (hasOverlap) {
+        const offsetAngles = [0, Math.PI / 4, Math.PI / 2, Math.PI * 3 / 4, Math.PI, -Math.PI / 4, -Math.PI / 2, -Math.PI * 3 / 4];
+        let resolved = false;
+        for (const angle of offsetAngles) {
+          const nx = x + Math.cos(angle) * minSpacing;
+          const ny = y + Math.sin(angle) * minSpacing;
+          // 确保在边界内
+          if (nx < bounds.xMin || nx > bounds.xMax || ny < bounds.yMin || ny > bounds.yMax) continue;
+          let ok = true;
+          for (const t of this.targets) {
+            const dx = nx - t.position.x;
+            const dy = ny - t.position.y;
+            if (Math.sqrt(dx * dx + dy * dy) < minDist) {
+              ok = false;
+              break;
+            }
+          }
+          if (ok) {
+            x = nx;
+            y = ny;
+            resolved = true;
+            break;
+          }
+        }
+        // 如果所有方向都无法解决，放弃生成
+        if (!resolved) return false;
       }
 
       const position = new BABYLON.Vector3(x, y, 8);
       const mesh = this.spawnTarget(position, actualSize);
 
-      // 动态点击：存储 baseY 和 phaseOffset 用于独立移动
+      // 动态点击：存储 baseX/baseY 和 phaseOffset 用于独立移动
       if (this.config.category === 'dynamic-clicking' && phaseOffset !== undefined) {
         mesh.metadata = {
           ...mesh.metadata,
-          baseY: y,
+          baseX: baseX ?? x,
+          baseY: baseY ?? y,
           phaseOffset,
         };
       }

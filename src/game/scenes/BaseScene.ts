@@ -168,7 +168,7 @@ export abstract class BaseScene {
     if (this.breakMode !== 'time' || this.hitTimeMs <= 0) return false;
 
     const accumulated = ((target.metadata?.hitTimeAccumulated as number) ?? 0) + deltaTime;
-    target.metadata = { ...target.metadata, hitTimeAccumulated: accumulated };
+    (target.metadata as Record<string, unknown>).hitTimeAccumulated = accumulated;
 
     if (accumulated >= this.hitTimeMs) {
       this.removeTarget(target);

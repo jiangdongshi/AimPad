@@ -54,6 +54,12 @@ export function Training() {
     if (tabParam === 'custom' || tabParam === 'favorites') return tabParam;
     return 'preset';
   });
+  // 同步 URL 的 tab 参数到 activeTab 状态（同一路由下切换 query 参数时不会重新挂载组件）
+  useEffect(() => {
+    if (tabParam === 'custom' || tabParam === 'favorites') {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
