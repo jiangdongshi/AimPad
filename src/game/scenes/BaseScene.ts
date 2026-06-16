@@ -12,6 +12,9 @@ export abstract class BaseScene {
   protected startTime: number = 0;
   protected isActive: boolean = false;
   protected taskId: string;
+  protected hitsToBreak: number = 1; // 目标被击中多少次后刷新，默认1（一击即刷新）
+  protected hitTimeMs: number = 0; // 受击时间阈值(ms)，0=禁用
+  protected breakMode: 'hits' | 'time' = 'hits'; // 击破方式
 
   // 目标小球颜色（默认淡蓝色 #ADD8E6）
   protected targetColor: BABYLON.Color3 = new BABYLON.Color3(0.68, 0.85, 0.9);
@@ -20,6 +23,9 @@ export abstract class BaseScene {
   protected wallColor: BABYLON.Color3 | null = null;
   protected wallMaterials: BABYLON.StandardMaterial[] = [];
   protected groundMaterial: BABYLON.StandardMaterial | null = null;
+
+  // 画质相关的球体分段数（由 GameEngine 根据画质决定）
+  protected qualitySegments: number = 12;
 
   // 对象池：预先创建的可重用目标
   protected targetPool: BABYLON.Mesh[] = [];
@@ -42,6 +48,7 @@ export abstract class BaseScene {
     this.scene = engine.createScene();
     this.camera = this.scene.getCameraByName('camera') as BABYLON.UniversalCamera;
     this.taskId = taskId;
+    this.qualitySegments = engine.getQualitySphereSegments();
   }
 
   abstract setup(): Promise<void>;
@@ -139,10 +146,41 @@ export abstract class BaseScene {
   }
 
   protected onTargetHit(mesh: BABYLON.Mesh) {
+    // 时间模式不响应点击，由 checkHitTime 处理
+    if (this.breakMode === 'time') return;
+
+    // 追踪击中次数
+    const hitCount = ((mesh.metadata?.hitCount as number) ?? 0) + 1;
+    mesh.metadata = { ...mesh.metadata, hitCount };
+
     this.hits++;
     const reactionTime = performance.now() - (mesh.metadata?.spawnTime || this.startTime);
     this.reactionTimes.push(reactionTime);
-    this.removeTarget(mesh);
+
+    if (hitCount >= this.hitsToBreak) {
+      this.removeTarget(mesh);
+      this.onTargetBroken(mesh);
+    }
+  }
+
+  /** 检查受击时间累积（时间模式），返回是否击破目标 */
+  protected checkHitTime(target: BABYLON.Mesh, deltaTime: number): boolean {
+    if (this.breakMode !== 'time' || this.hitTimeMs <= 0) return false;
+
+    const accumulated = ((target.metadata?.hitTimeAccumulated as number) ?? 0) + deltaTime;
+    target.metadata = { ...target.metadata, hitTimeAccumulated: accumulated };
+
+    if (accumulated >= this.hitTimeMs) {
+      this.removeTarget(target);
+      this.onTargetBroken(target);
+      return true;
+    }
+    return false;
+  }
+
+  /** 目标被击破后的钩子，子类可重写以补充目标 */
+  protected onTargetBroken(_mesh: BABYLON.Mesh): void {
+    // 默认空实现
   }
 
   // 初始化对象池 - 使用共享材质减少 DrawCall
@@ -157,7 +195,7 @@ export abstract class BaseScene {
     for (let i = 0; i < this.POOL_SIZE; i++) {
       const target = BABYLON.MeshBuilder.CreateSphere(
         `target-pool-${i}`,
-        { diameter: 1, segments: 12 }, // 减少分段数提升性能
+        { diameter: 1, segments: this.qualitySegments },
         this.scene
       );
       target.setEnabled(false);
@@ -191,7 +229,7 @@ export abstract class BaseScene {
       // 池耗尽时回退到创建新对象（不应该发生）
       target = BABYLON.MeshBuilder.CreateSphere(
         `target-${Date.now()}`,
-        { diameter: size, segments: 12 },
+        { diameter: size, segments: this.qualitySegments },
         this.scene
       );
       const material = new BABYLON.StandardMaterial(`targetMat-${Date.now()}`, this.scene);

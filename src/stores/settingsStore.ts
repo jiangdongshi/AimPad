@@ -14,7 +14,8 @@ interface SettingsState {
   locale: LocaleId;
 
   // 手柄设置
-  gamepadDeadzone: number;
+  leftDeadzone: number;
+  rightDeadzone: number;
   gamepadSensitivity: number;
   gamepadInvertY: boolean;
   gamepadFireButton: string;
@@ -48,7 +49,8 @@ interface SettingsState {
 const DEFAULT_SETTINGS = {
   theme: 'default' as ThemeId,
   locale: 'en' as LocaleId,
-  gamepadDeadzone: 0.1,
+  leftDeadzone: 0.1,
+  rightDeadzone: 0.1,
   gamepadSensitivity: 1.0,
   gamepadInvertY: false,
   gamepadFireButton: 'RT',
@@ -76,6 +78,8 @@ function pickSettings(server: ServerSettings) {
     soundEnabled: server.soundEnabled,
     soundVolume: server.soundVolume,
     gamepadDeadzone: server.gamepadDeadzone,
+    leftDeadzone: (server as any).leftDeadzone ?? server.gamepadDeadzone ?? 0.1,
+    rightDeadzone: (server as any).rightDeadzone ?? server.gamepadDeadzone ?? 0.1,
     gamepadSensitivity: server.gamepadSensitivity,
     gamepadInvertY: server.gamepadInvertY,
     gamepadFireButton: server.gamepadFireButton,
@@ -96,7 +100,8 @@ function toServerPayload(state: SettingsState) {
     quality: state.quality,
     sound_enabled: state.soundEnabled ? 1 : 0,
     sound_volume: state.soundVolume,
-    gamepad_deadzone: state.gamepadDeadzone,
+    left_deadzone: state.leftDeadzone,
+    right_deadzone: state.rightDeadzone,
     gamepad_sensitivity: state.gamepadSensitivity,
     gamepad_invert_y: state.gamepadInvertY ? 1 : 0,
     gamepad_fire_button: state.gamepadFireButton,
@@ -150,10 +155,22 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'aimpad-settings',
+      merge: (persisted: unknown, current) => {
+        const p = persisted as Record<string, unknown> | null;
+        // 迁移旧版 gamepadDeadzone → leftDeadzone / rightDeadzone
+        const legacyDeadzone = p?.gamepadDeadzone as number | undefined;
+        return {
+          ...current,
+          ...(p as any),
+          leftDeadzone: (p?.leftDeadzone as number) ?? legacyDeadzone ?? current.leftDeadzone,
+          rightDeadzone: (p?.rightDeadzone as number) ?? legacyDeadzone ?? current.rightDeadzone,
+        };
+      },
       partialize: (state) => ({
         theme: state.theme,
         locale: state.locale,
-        gamepadDeadzone: state.gamepadDeadzone,
+        leftDeadzone: state.leftDeadzone,
+        rightDeadzone: state.rightDeadzone,
         gamepadSensitivity: state.gamepadSensitivity,
         gamepadInvertY: state.gamepadInvertY,
         gamepadFireButton: state.gamepadFireButton,

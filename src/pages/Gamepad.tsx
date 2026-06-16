@@ -16,7 +16,7 @@ const IDX_MAP: Record<string, number> = {
 
 export function Gamepad() {
   const locale = useLocale();
-  const { connected, type, id, leftStick, rightStick, buttons } = useGamepad(0);
+  const { connected, type, id, leftStick, rightStick, buttons } = useGamepad(0, 0);
 
   const isPressed = (name: string) => {
     const idx = IDX_MAP[name];

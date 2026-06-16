@@ -24,6 +24,7 @@ export interface TaskParameters {
   spawnInterval: number; // ms
   minDistance: number;
   maxDistance: number;
+  hitsToBreak?: number;  // 目标被击中多少次后刷新，默认1
 }
 
 export interface ScoringWeights {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -97,7 +97,7 @@ export function CustomTaskEditor() {
 
   // 编辑模式：从 URL 参数 ?edit=<taskId> 读取
   const editTaskId = searchParams.get('edit');
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(editTaskId);
+  const [editingTaskId] = useState<string | null>(editTaskId);
 
   const TASK_CATEGORIES: { value: TaskCategory; label: string }[] = [
     { value: 'static-clicking', label: locale['taskType.static-clicking'] },
@@ -309,6 +309,17 @@ export function CustomTaskEditor() {
                 <input type="range" min="1" max="10" step="1" value={config.spawn.maxActive}
                   onChange={(e) => updateSpawn({ maxActive: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
               </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.hitsToBreak'] || '击破次数'}: {config.spawn.hitsToBreak ?? 1}{config.spawn.hitsToBreak >= 999 ? ' (永不)' : ''}</label>
+                <div className="flex gap-2 items-center">
+                  <input type="range" min="1" max="999" step="1" value={config.spawn.hitsToBreak ?? 1}
+                    onChange={(e) => updateSpawn({ hitsToBreak: parseInt(e.target.value) })} className="flex-1" style={{ accentColor: '#2563EB' }} />
+                  <input type="number" min="1" max="999" value={config.spawn.hitsToBreak ?? 1}
+                    onChange={(e) => updateSpawn({ hitsToBreak: Math.max(1, Math.min(999, parseInt(e.target.value) || 1)) })}
+                    className="w-16 px-2 py-1 text-sm rounded-lg text-center"
+                    style={{ backgroundColor: 'var(--color-bg-surface-hover)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }} />
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label style={labelStyle}>{locale['custom.gridRows'] || '网格行数'}: {config.display?.rows ?? 3}</label>
@@ -322,11 +333,6 @@ export function CustomTaskEditor() {
                     onChange={(e) => setConfig(prev => ({ ...prev, display: { ...prev.display!, cols: parseInt(e.target.value) } }))}
                     className="w-full" style={{ accentColor: '#2563EB' }} />
                 </div>
-              </div>
-              <div>
-                <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}</label>
-                <input type="range" min="0" max="5000" step="100" value={config.spawn.lifetime}
-                  onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
               </div>
             </CardContent>
           </Card>
@@ -357,7 +363,7 @@ export function CustomTaskEditor() {
               <div>
                 <label style={labelStyle}>{locale['custom.movementType'] || '轨迹'}</label>
                 <div className="flex flex-wrap gap-2">
-                  {TRACK_MOVEMENT_TYPES.filter(mt => mt.value !== 'static').map(mt => (
+                  {TRACK_MOVEMENT_TYPES.filter(mt => mt.value === 'linear' || mt.value === 'random').map(mt => (
                     <button key={mt.value} onClick={() => updateMovement({ type: mt.value })}
                       className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                       style={{
@@ -374,7 +380,7 @@ export function CustomTaskEditor() {
                 <div>
                   <label style={labelStyle}>{locale['custom.direction'] || '运动方向'}</label>
                   <div className="flex flex-wrap gap-2">
-                    {LINEAR_DIRECTIONS.map(d => (
+                    {LINEAR_DIRECTIONS.filter(d => d.value === 'horizontal' || d.value === 'vertical').map(d => (
                       <button key={d.value} onClick={() => updateMovement({ direction: d.value })}
                         className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                         style={{
@@ -389,9 +395,15 @@ export function CustomTaskEditor() {
                 </div>
               )}
               <div>
-                <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}</label>
-                <input type="range" min="0" max="5000" step="100" value={config.spawn.lifetime}
-                  onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+                <label style={labelStyle}>{locale['custom.hitsToBreak'] || '击破次数'}: {config.spawn.hitsToBreak ?? 1}{config.spawn.hitsToBreak >= 999 ? ' (永不)' : ''}</label>
+                <div className="flex gap-2 items-center">
+                  <input type="range" min="1" max="999" step="1" value={config.spawn.hitsToBreak ?? 1}
+                    onChange={(e) => updateSpawn({ hitsToBreak: parseInt(e.target.value) })} className="flex-1" style={{ accentColor: '#2563EB' }} />
+                  <input type="number" min="1" max="999" value={config.spawn.hitsToBreak ?? 1}
+                    onChange={(e) => updateSpawn({ hitsToBreak: Math.max(1, Math.min(999, parseInt(e.target.value) || 1)) })}
+                    className="w-16 px-2 py-1 text-sm rounded-lg text-center"
+                    style={{ backgroundColor: 'var(--color-bg-surface-hover)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }} />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -453,6 +465,11 @@ export function CustomTaskEditor() {
                 <input type="range" min="0" max="100" step="5" value={config.movement.randomness ?? 0}
                   onChange={(e) => updateMovement({ randomness: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
               </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.hitTimeMs'] || '受击时间'}: {(config.spawn.hitTimeMs || 0) === 0 ? locale['training.duration.unlimited'] : `${config.spawn.hitTimeMs || 0}ms`}</label>
+                <input type="range" min="0" max="10000" step="200" value={config.spawn.hitTimeMs || 0}
+                  onChange={(e) => updateSpawn({ hitTimeMs: parseInt(e.target.value), breakMode: 'time' })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
             </CardContent>
           </Card>
         );
@@ -474,6 +491,48 @@ export function CustomTaskEditor() {
                 <input type="range" min="1" max="10" step="1" value={config.spawn.maxActive}
                   onChange={(e) => updateSpawn({ maxActive: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
               </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.breakMode'] || '击破方式'}</label>
+                <div className="flex gap-2">
+                  <button onClick={() => updateSpawn({ breakMode: 'hits' })}
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                    style={{
+                      backgroundColor: (config.spawn.breakMode || 'hits') === 'hits' ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                      color: (config.spawn.breakMode || 'hits') === 'hits' ? '#2563EB' : 'var(--color-text-secondary)',
+                      border: (config.spawn.breakMode || 'hits') === 'hits' ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                    }}>
+                    {locale['custom.breakModeHits'] || '击破次数'}
+                  </button>
+                  <button onClick={() => updateSpawn({ breakMode: 'time', hitTimeMs: config.spawn.hitTimeMs || 2000 })}
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                    style={{
+                      backgroundColor: config.spawn.breakMode === 'time' ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                      color: config.spawn.breakMode === 'time' ? '#2563EB' : 'var(--color-text-secondary)',
+                      border: config.spawn.breakMode === 'time' ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                    }}>
+                    {locale['custom.breakModeTime'] || '受击时间'}
+                  </button>
+                </div>
+              </div>
+              {(config.spawn.breakMode || 'hits') === 'hits' ? (
+                <div>
+                  <label style={labelStyle}>{locale['custom.hitsToBreak'] || '击破次数'}: {config.spawn.hitsToBreak ?? 1}{config.spawn.hitsToBreak >= 999 ? ' (永不)' : ''}</label>
+                  <div className="flex gap-2 items-center">
+                    <input type="range" min="1" max="999" step="1" value={config.spawn.hitsToBreak ?? 1}
+                      onChange={(e) => updateSpawn({ hitsToBreak: parseInt(e.target.value) })} className="flex-1" style={{ accentColor: '#2563EB' }} />
+                    <input type="number" min="1" max="999" value={config.spawn.hitsToBreak ?? 1}
+                      onChange={(e) => updateSpawn({ hitsToBreak: Math.max(1, Math.min(999, parseInt(e.target.value) || 1)) })}
+                      className="w-16 px-2 py-1 text-sm rounded-lg text-center"
+                      style={{ backgroundColor: 'var(--color-bg-surface-hover)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }} />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label style={labelStyle}>{locale['custom.hitTimeMs'] || '受击时间'}: {(config.spawn.hitTimeMs || 0) === 0 ? '2000ms' : `${config.spawn.hitTimeMs}ms`}</label>
+                  <input type="range" min="200" max="10000" step="200" value={config.spawn.hitTimeMs || 2000}
+                    onChange={(e) => updateSpawn({ hitTimeMs: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label style={labelStyle}>{locale['custom.gridRows'] || '网格行数'}: {config.display?.rows ?? 3}</label>
@@ -522,11 +581,6 @@ export function CustomTaskEditor() {
                   </div>
                 </div>
               )}
-              <div>
-                <label style={labelStyle}>{locale['custom.lifetime'] || '存活时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${config.spawn.lifetime}ms`}</label>
-                <input type="range" min="0" max="5000" step="100" value={config.spawn.lifetime}
-                  onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
-              </div>
             </CardContent>
           </Card>
         );
@@ -557,6 +611,17 @@ export function CustomTaskEditor() {
                 <label style={labelStyle}>{locale['custom.maxActive'] || '同时数量'}: {config.spawn.maxActive}</label>
                 <input type="range" min="1" max="5" step="1" value={config.spawn.maxActive}
                   onChange={(e) => updateSpawn({ maxActive: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{locale['custom.hitsToBreak'] || '击破次数'}: {config.spawn.hitsToBreak ?? 1}{config.spawn.hitsToBreak >= 999 ? ' (永不)' : ''}</label>
+                <div className="flex gap-2 items-center">
+                  <input type="range" min="1" max="999" step="1" value={config.spawn.hitsToBreak ?? 1}
+                    onChange={(e) => updateSpawn({ hitsToBreak: parseInt(e.target.value) })} className="flex-1" style={{ accentColor: '#2563EB' }} />
+                  <input type="number" min="1" max="999" value={config.spawn.hitsToBreak ?? 1}
+                    onChange={(e) => updateSpawn({ hitsToBreak: Math.max(1, Math.min(999, parseInt(e.target.value) || 1)) })}
+                    className="w-16 px-2 py-1 text-sm rounded-lg text-center"
+                    style={{ backgroundColor: 'var(--color-bg-surface-hover)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }} />
+                </div>
               </div>
             </CardContent>
           </Card>

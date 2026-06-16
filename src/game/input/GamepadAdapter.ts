@@ -14,11 +14,13 @@ const DEFAULT_DEADZONE = 0.1;
 
 export class GamepadAdapter {
   private state: GamepadState;
-  private deadzone: number;
+  private leftDeadzone: number;
+  private rightDeadzone: number;
   private mapping: ButtonMapping | null = null;
 
-  constructor(deadzone = DEFAULT_DEADZONE) {
-    this.deadzone = deadzone;
+  constructor(leftDeadzone = DEFAULT_DEADZONE, rightDeadzone = DEFAULT_DEADZONE) {
+    this.leftDeadzone = leftDeadzone;
+    this.rightDeadzone = rightDeadzone;
     this.state = {
       connected: false,
       type: 'unknown',
@@ -40,15 +42,15 @@ export class GamepadAdapter {
       this.mapping = getButtonMapping(gamepad);
     }
 
-    // 更新摇杆状态（带死区处理）
+    // 更新摇杆状态（左右摇杆各自独立死区）
     const leftStick = this.applyDeadzone({
       x: gamepad.axes[0] || 0,
       y: gamepad.axes[1] || 0,
-    });
+    }, this.leftDeadzone);
     const rightStick = this.applyDeadzone({
       x: gamepad.axes[2] || 0,
       y: gamepad.axes[3] || 0,
-    });
+    }, this.rightDeadzone);
 
     // 更新按钮状态
     const buttons: Record<string, { pressed: boolean; value: number }> = {};
@@ -70,13 +72,13 @@ export class GamepadAdapter {
     return this.state;
   }
 
-  private applyDeadzone(stick: { x: number; y: number }) {
+  private applyDeadzone(stick: { x: number; y: number }, deadzone: number) {
     const magnitude = Math.sqrt(stick.x ** 2 + stick.y ** 2);
-    if (magnitude < this.deadzone) {
+    if (magnitude < deadzone) {
       return { x: 0, y: 0 };
     }
     // 重新映射以保持平滑过渡
-    const scale = (magnitude - this.deadzone) / (1 - this.deadzone);
+    const scale = (magnitude - deadzone) / (1 - deadzone);
     return {
       x: (stick.x / magnitude) * scale,
       y: (stick.y / magnitude) * scale,
@@ -87,7 +89,11 @@ export class GamepadAdapter {
     return { ...this.state };
   }
 
-  setDeadzone(value: number) {
-    this.deadzone = Math.max(0, Math.min(0.5, value));
+  setLeftDeadzone(value: number) {
+    this.leftDeadzone = Math.max(0, Math.min(0.5, value));
+  }
+
+  setRightDeadzone(value: number) {
+    this.rightDeadzone = Math.max(0, Math.min(0.5, value));
   }
 }

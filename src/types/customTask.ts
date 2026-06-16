@@ -52,6 +52,9 @@ export interface MovementConfig {
   bounds?: MovementBounds;
 }
 
+// 目标击破方式
+export type BreakMode = 'hits' | 'time';
+
 // 生成配置
 export interface SpawnConfig {
   mode: SpawnMode;
@@ -59,6 +62,9 @@ export interface SpawnConfig {
   maxActive: number;       // 最大同时存在目标数
   lifetime: number;        // ms, 0 = 无限
   staggerDelay: number;    // burst 模式下的间隔
+  hitsToBreak: number;     // 目标被击中多少次后刷新（1=一击即刷新，999=永不刷新）
+  breakMode?: BreakMode;   // 击破方式：'hits'=击中次数，'time'=受击时间（目标切换使用）
+  hitTimeMs?: number;      // 受击总时间(ms)，达到后刷新目标（追踪/目标切换使用，0=禁用）
 }
 
 // 网格显示配置 (仅 grid 类型需要)
@@ -154,6 +160,9 @@ export const DEFAULT_SPAWN: SpawnConfig = {
   maxActive: 3,
   lifetime: 0,
   staggerDelay: 0,
+  hitsToBreak: 1,
+  breakMode: 'hits',
+  hitTimeMs: 0,
 };
 
 // 默认网格显示配置
@@ -195,7 +204,7 @@ export const TASK_TEMPLATES: Omit<SceneConfig, 'name' | 'description'>[] = [
     duration: 30000,
     target: { shape: 'sphere', size: 0.8, color: '#FF3333', glowIntensity: 0.5, emissive: true },
     movement: { type: 'static', speed: 0, bounds: { xMin: -5, xMax: 5, yMin: 3, yMax: 8 } },
-    spawn: { mode: 'interval', interval: 800, maxActive: 3, lifetime: 0, staggerDelay: 0 },
+    spawn: { mode: 'interval', interval: 800, maxActive: 3, lifetime: 0, staggerDelay: 0, hitsToBreak: 1, breakMode: 'hits', hitTimeMs: 0 },
     display: { rows: 3, cols: 5, showLines: true, lineColor: '#333344', wallColor: '#1a1a2e', wallHeight: 10 },
     scoring: { weightAccuracy: 0.4, weightSpeed: 0.4, weightConsistency: 0.2 },
   },
@@ -204,7 +213,7 @@ export const TASK_TEMPLATES: Omit<SceneConfig, 'name' | 'description'>[] = [
     duration: 30000,
     target: { shape: 'sphere', size: 1.2, color: '#33D94D', glowIntensity: 0.6, emissive: true },
     movement: { type: 'circular', speed: 3, bounds: { xMin: -4, xMax: 4, yMin: 4, yMax: 8 } },
-    spawn: { mode: 'continuous', interval: 0, maxActive: 1, lifetime: 0, staggerDelay: 0 },
+    spawn: { mode: 'continuous', interval: 0, maxActive: 1, lifetime: 0, staggerDelay: 0, hitsToBreak: 1, breakMode: 'time', hitTimeMs: 2000 },
     display: { rows: 3, cols: 5, showLines: true, lineColor: '#333344', wallColor: '#1a1a2e', wallHeight: 10 },
     scoring: { weightAccuracy: 0.6, weightSpeed: 0.1, weightConsistency: 0.3 },
   },

@@ -77,20 +77,44 @@ export class GridshotScene extends BaseScene {
 
     if (availableCells.length === 0) return false;
 
-    const [row, col] = availableCells[Math.floor(Math.random() * availableCells.length)];
+    // 随机打乱候选格子
+    for (let i = availableCells.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [availableCells[i], availableCells[j]] = [availableCells[j], availableCells[i]];
+    }
+
     const cellWidth = 14 / gridCols;
     const cellHeight = 8 / gridRows;
-
-    const x = (col - gridCols / 2 + 0.5) * cellWidth;
-    const y = (row + 0.5) * cellHeight + 2;
     const z = 8;
 
-    const mesh = this.spawnTarget(new BABYLON.Vector3(x, y, z), targetSize);
-    const cellKey = `${row},${col}`;
-    mesh.metadata = { ...mesh.metadata, cellKey };
-    this.occupiedCells.set(cellKey, mesh);
+    for (const [row, col] of availableCells) {
+      const x = (col - gridCols / 2 + 0.5) * cellWidth;
+      const y = (row + 0.5) * cellHeight + 2;
 
-    return true;
+      // 检查与所有已存在目标的距离，确保不重叠（间距 >= 目标直径）
+      const minDist = targetSize;
+      let overlaps = false;
+      for (const t of this.targets) {
+        const dx = x - t.position.x;
+        const dy = y - t.position.y;
+        if (Math.sqrt(dx * dx + dy * dy) < minDist) {
+          overlaps = true;
+          break;
+        }
+      }
+
+      if (overlaps) continue;
+
+      const mesh = this.spawnTarget(new BABYLON.Vector3(x, y, z), targetSize);
+      const cellKey = `${row},${col}`;
+      mesh.metadata = { ...mesh.metadata, cellKey };
+      this.occupiedCells.set(cellKey, mesh);
+
+      return true;
+    }
+
+    // 所有候选位置都太近
+    return false;
   }
 
   /** 获取当前未被占用的格子列表 */
@@ -107,20 +131,24 @@ export class GridshotScene extends BaseScene {
   }
 
   protected onTargetHit(mesh: BABYLON.Mesh) {
-    // 先释放格子，再调用父类移除逻辑
+    // 先释放格子（无论是否击破都释放，因为被击中了）
     const cellKey = mesh.metadata?.cellKey as string | undefined;
-    if (cellKey) {
+    super.onTargetHit(mesh);
+    // 如果目标被击破，释放格子
+    if (cellKey && !this.targets.includes(mesh)) {
       this.occupiedCells.delete(cellKey);
     }
-    super.onTargetHit(mesh);
-    // 立即补充一个新目标，无延迟
+  }
+
+  protected onTargetBroken(_mesh: BABYLON.Mesh) {
+    // 目标被击破后立即补充一个新目标
     this.spawnRandomTarget();
   }
 
   private createGridLines() {
     const { gridRows, gridCols } = this.config;
     const gridColor = getSceneGridColor();
-    const gridZ = 8;
+    const gridZ = 7.98;
 
     for (let i = 0; i <= gridCols; i++) {
       const x = (i - gridCols / 2) * (14 / gridCols);

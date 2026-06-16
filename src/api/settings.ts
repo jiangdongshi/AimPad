@@ -11,6 +11,8 @@ export interface ServerSettings {
   soundEnabled: boolean;
   soundVolume: number;
   gamepadDeadzone: number;
+  leftDeadzone: number;
+  rightDeadzone: number;
   gamepadSensitivity: number;
   gamepadInvertY: boolean;
   gamepadFireButton: string;
