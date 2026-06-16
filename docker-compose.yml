@@ -1,0 +1,27 @@
+# /opt/aimpad/docker-compose.yml
+
+services:
+  # ============================================
+  # AimPad 前端（Nginx 静态文件服务）
+  # ============================================
+  aimpad:
+    image: swr.cn-north-4.myhuaweicloud.com/aimpad/aimpad:latest
+    container_name: aimpad
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - aimpad-net
+
+# ============================================
+# 网络配置
+# ============================================
+networks:
+  aimpad-net:
+    driver: bridge
