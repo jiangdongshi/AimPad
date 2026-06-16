@@ -77,7 +77,7 @@ export function Training() {
     setTaskDuration,
   } = useTraining();
 
-  const { hits, misses, score, fps, realtimeScore, isTracking } = useGameStore();
+  const { hits, misses, fps, realtimeScore, isTracking } = useGameStore();
   const isPausedByUser = useRef(false); // 标记是否是用户主动暂停
   const [isPaused, setIsPaused] = useState(false);
   const [showDurationPopup, setShowDurationPopup] = useState(false);

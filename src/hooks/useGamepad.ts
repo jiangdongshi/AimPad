@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { GamepadAdapter } from '@/game/input/GamepadAdapter';
 import type { GamepadState } from '@/game/input/GamepadAdapter';
 
-export function useGamepad(deadzone = 0.1) {
+export function useGamepad(leftDeadzone = 0.1, rightDeadzone = 0.1) {
   const adapterRef = useRef<GamepadAdapter | null>(null);
   const [state, setState] = useState<GamepadState>({
     connected: false,
@@ -14,7 +14,7 @@ export function useGamepad(deadzone = 0.1) {
   });
 
   useEffect(() => {
-    adapterRef.current = new GamepadAdapter(deadzone);
+    adapterRef.current = new GamepadAdapter(leftDeadzone, rightDeadzone);
 
     const handleConnect = (e: GamepadEvent) => {
       console.log('Gamepad connected:', e.gamepad.id);
@@ -46,11 +46,15 @@ export function useGamepad(deadzone = 0.1) {
       window.removeEventListener('gamepaddisconnected', handleDisconnect);
       cancelAnimationFrame(animationId);
     };
-  }, [deadzone]);
+  }, [leftDeadzone, rightDeadzone]);
 
-  const setDeadzone = useCallback((value: number) => {
-    adapterRef.current?.setDeadzone(value);
+  const setLeftDeadzone = useCallback((value: number) => {
+    adapterRef.current?.setLeftDeadzone(value);
   }, []);
 
-  return { ...state, setDeadzone };
+  const setRightDeadzone = useCallback((value: number) => {
+    adapterRef.current?.setRightDeadzone(value);
+  }, []);
+
+  return { ...state, setLeftDeadzone, setRightDeadzone };
 }

@@ -31,6 +31,9 @@ const DEFAULT_CONFIG: SceneConfig = {
     maxActive: 3,
     lifetime: 0,
     staggerDelay: 0,
+    hitsToBreak: 1,
+    breakMode: 'hits' as const,
+    hitTimeMs: 0,
   },
   display: {
     rows: 3,
@@ -50,7 +53,6 @@ const DEFAULT_CONFIG: SceneConfig = {
 export class CustomScene extends BaseScene {
   private config: SceneConfig;
   private gridLines: BABYLON.LinesMesh[] = [];
-  private trackGuide: BABYLON.LinesMesh | null = null;
   private lastSpawnTime: number = 0;
 
   // 追踪类实时计分（与球体追踪/平移追踪一致：准星靠近目标即计分）
@@ -86,6 +88,11 @@ export class CustomScene extends BaseScene {
       this.setTargetColor(this.config.target.color);
     }
 
+    // 设置击破方式
+    this.hitsToBreak = Math.max(1, this.config.spawn.hitsToBreak ?? 1);
+    this.breakMode = this.config.spawn.breakMode ?? 'hits';
+    this.hitTimeMs = this.config.spawn.hitTimeMs ?? 0;
+
     // 初始生成目标
     for (let i = 0; i < this.config.spawn.maxActive; i++) {
       this.spawnRandomTarget();
@@ -113,24 +120,27 @@ export class CustomScene extends BaseScene {
 
   private createDisplayElements() {
     const display = this.config.display!;
-    const gridZ = 8;
+    const gridZ = 7.98;
 
     if (this.isTrackingType()) {
-      // 跟踪类型显示轨道
-      this.createTrackGuide();
+      // 跟踪类型不显示轨道线
     } else {
-      // 网格类型显示网格线
+      // 网格类型显示网格线（与 GridshotScene 完全一致：14×8 网格区域，x∈[-7,7], y∈[2,10]）
       const gridColor = this.hexToColor3(display.lineColor);
+      const gridWidth = 14;   // 与 GridshotScene 一致
+      const gridHeight = 8;   // 与 GridshotScene 一致
+      const gridLeft = -7;    // gridWidth/2
+      const gridBottom = 2;   // 与 GridshotScene 一致
 
       // 垂直线
       for (let i = 0; i <= display.cols; i++) {
-        const x = (i - display.cols / 2) * (14 / display.cols);
+        const x = (i - display.cols / 2) * (gridWidth / display.cols);
         const line = BABYLON.MeshBuilder.CreateLines(
           `gridLineV${i}`,
           {
             points: [
-              new BABYLON.Vector3(x, 2, gridZ),
-              new BABYLON.Vector3(x, 2 + display.wallHeight, gridZ),
+              new BABYLON.Vector3(x, gridBottom, gridZ),
+              new BABYLON.Vector3(x, gridBottom + gridHeight, gridZ),
             ],
           },
           this.scene
@@ -141,13 +151,13 @@ export class CustomScene extends BaseScene {
 
       // 水平线
       for (let i = 0; i <= display.rows; i++) {
-        const y = i * (display.wallHeight / display.rows) + 2;
+        const y = i * (gridHeight / display.rows) + gridBottom;
         const line = BABYLON.MeshBuilder.CreateLines(
           `gridLineH${i}`,
           {
             points: [
-              new BABYLON.Vector3(-7, y, gridZ),
-              new BABYLON.Vector3(7, y, gridZ),
+              new BABYLON.Vector3(gridLeft, y, gridZ),
+              new BABYLON.Vector3(gridLeft + gridWidth, y, gridZ),
             ],
           },
           this.scene
@@ -156,13 +166,14 @@ export class CustomScene extends BaseScene {
         this.gridLines.push(line);
       }
 
-      // 后墙背景
+      // 后墙背景（覆盖房间盒子完整高度）
+      const backWallHeight = display.wallHeight + 2;
       const backWall = BABYLON.MeshBuilder.CreatePlane(
         'backWall',
-        { width: 16, height: display.wallHeight },
+        { width: 16, height: backWallHeight },
         this.scene
       );
-      backWall.position = new BABYLON.Vector3(0, 2 + display.wallHeight / 2, gridZ + 0.01);
+      backWall.position = new BABYLON.Vector3(0, backWallHeight / 2 - 1, gridZ + 0.03);
 
       const wallMat = new BABYLON.StandardMaterial('wallMat', this.scene);
       wallMat.diffuseColor = this.wallColor ?? this.hexToColor3(display.wallColor);
@@ -178,41 +189,6 @@ export class CustomScene extends BaseScene {
       depth: 8,
       yOffset: 1,
     });
-  }
-
-  private createTrackGuide() {
-    const gridColor = this.hexToColor3(this.config.display?.lineColor || '#333344');
-    const points: BABYLON.Vector3[] = [];
-
-    if (this.config.movement.type === 'linear') {
-      // 线性运动：根据方向绘制直线轨道
-      const [start, end] = this.getLinearGuideEndpoints();
-      points.push(start, end);
-    } else {
-      // 圆形/正弦/8字运动：绘制椭圆轨道
-      const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
-      const segments = 64;
-      const centerX = (bounds.xMin + bounds.xMax) / 2;
-      const centerY = (bounds.yMin + bounds.yMax) / 2;
-      const radiusX = (bounds.xMax - bounds.xMin) / 2;
-      const radiusY = (bounds.yMax - bounds.yMin) / 2;
-
-      for (let i = 0; i <= segments; i++) {
-        const angle = (i / segments) * Math.PI * 2;
-        points.push(new BABYLON.Vector3(
-          centerX + Math.cos(angle) * radiusX,
-          centerY + Math.sin(angle) * radiusY,
-          8
-        ));
-      }
-    }
-
-    this.trackGuide = BABYLON.MeshBuilder.CreateLines(
-      'trackGuide',
-      { points },
-      this.scene
-    );
-    this.trackGuide.color = gridColor;
   }
 
   private isTrackingType(): boolean {
@@ -237,15 +213,17 @@ export class CustomScene extends BaseScene {
   }
 
   protected onTargetHit(mesh: BABYLON.Mesh) {
-    // 静态点击类型：先释放格子占用（与 GridshotScene 逻辑一致）
-    if (this.isStaticType()) {
-      const cellKey = mesh.metadata?.cellKey as string | undefined;
-      if (cellKey) {
-        this.occupiedCells.delete(cellKey);
-      }
-    }
+    // 先记录击中（父类根据 hitsToBreak 决定是否移除目标）
+    const cellKey = this.isStaticType() ? (mesh.metadata?.cellKey as string | undefined) : undefined;
     super.onTargetHit(mesh);
-    // 立即补充一个新目标，无延迟
+    // 如果目标被移除，释放格子
+    if (cellKey && !this.targets.includes(mesh)) {
+      this.occupiedCells.delete(cellKey);
+    }
+  }
+
+  protected onTargetBroken(_mesh: BABYLON.Mesh) {
+    // 目标被击破后补充新目标
     this.spawnRandomTarget();
   }
 
@@ -262,12 +240,11 @@ export class CustomScene extends BaseScene {
     // 生成新目标
     this.handleSpawning(now);
 
-    // 追踪类型：实时累计追踪得分（准星与目标距离越近得分越高，与球体追踪/平移追踪一致）
+    // 追踪类型：实时累计追踪得分 + 受击时间检测
     if (this.config.category === 'tracking' && this.targets.length > 0) {
       const target = this.targets[0];
       const screenPos = this.worldToScreen(target.position);
 
-      // 准星固定在屏幕中央
       const renderWidth = this.scene.getEngine().getRenderWidth();
       const renderHeight = this.scene.getEngine().getRenderHeight();
       const crosshairX = renderWidth / 2;
@@ -280,6 +257,31 @@ export class CustomScene extends BaseScene {
       if (distance < this.TRACK_THRESHOLD) {
         const normalizedScore = 1 - distance / this.TRACK_THRESHOLD;
         this.realtimeScore += normalizedScore * (deltaTime / 1000) * 100;
+
+        // 受击时间累积
+        if (this.breakMode === 'time') {
+          this.checkHitTime(target, deltaTime);
+        }
+      }
+    }
+
+    // 目标切换类型（时间模式）：检测准星落在哪个目标上，累积受击时间
+    if (this.config.category === 'target-switching' && this.breakMode === 'time' && this.targets.length > 0) {
+      const renderWidth = this.scene.getEngine().getRenderWidth();
+      const renderHeight = this.scene.getEngine().getRenderHeight();
+      const crosshairX = renderWidth / 2;
+      const crosshairY = renderHeight / 2;
+      const threshold = this.TRACK_THRESHOLD * 0.8; // 比追踪稍严格
+
+      for (const target of this.targets) {
+        const screenPos = this.worldToScreen(target.position);
+        const dx = crosshairX - screenPos.x;
+        const dy = crosshairY - screenPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < threshold) {
+          if (this.checkHitTime(target, deltaTime)) break; // 击破一个就停止检查
+        }
       }
     }
 
@@ -352,43 +354,9 @@ export class CustomScene extends BaseScene {
     return { x, y };
   }
 
-  /** 获取线性运动的轨道起始方向向量（用于轨道指引线绘制） */
-  private getLinearGuideEndpoints(): [BABYLON.Vector3, BABYLON.Vector3] {
-    const bounds = this.config.movement.bounds || { xMin: -4, xMax: 4, yMin: 4, yMax: 8 };
-    const direction = this.config.movement.direction || 'horizontal';
-    const centerX = (bounds.xMin + bounds.xMax) / 2;
-    const centerY = (bounds.yMin + bounds.yMax) / 2;
-    const radiusX = (bounds.xMax - bounds.xMin) / 2;
-    const radiusY = (bounds.yMax - bounds.yMin) / 2;
-
-    switch (direction) {
-      case 'vertical':
-        return [
-          new BABYLON.Vector3(centerX, centerY - radiusY, 8),
-          new BABYLON.Vector3(centerX, centerY + radiusY, 8),
-        ];
-      case 'diagonal-tl-br':
-        return [
-          new BABYLON.Vector3(centerX - radiusX, centerY + radiusY, 8),
-          new BABYLON.Vector3(centerX + radiusX, centerY - radiusY, 8),
-        ];
-      case 'diagonal-tr-bl':
-        return [
-          new BABYLON.Vector3(centerX + radiusX, centerY + radiusY, 8),
-          new BABYLON.Vector3(centerX - radiusX, centerY - radiusY, 8),
-        ];
-      default: // 'horizontal'
-        return [
-          new BABYLON.Vector3(centerX - radiusX, centerY, 8),
-          new BABYLON.Vector3(centerX + radiusX, centerY, 8),
-        ];
-    }
-  }
-
   private updateMovingTarget(deltaTime: number) {
     if (this.targets.length === 0) return;
 
-    const target = this.targets[0];
     const speed = this.config.movement.speed;
     const type = this.config.movement.type;
     const randomness = this.config.movement.randomness ?? 0;
@@ -397,6 +365,37 @@ export class CustomScene extends BaseScene {
     const radiusY = (bounds.yMax - bounds.yMin) / 2;
 
     this.movementPhase += speed * deltaTime / 1000;
+
+    // 非追踪类型（动态点击）：所有目标各自独立移动，使用不同相位偏移
+    if (this.config.category === 'dynamic-clicking' && type === 'linear') {
+      const direction = this.config.movement.direction || 'horizontal';
+      for (let i = 0; i < this.targets.length; i++) {
+        const target = this.targets[i];
+        // 每个目标有独立的相位偏移，使它们在不同位置
+        const phaseOffset = (target.metadata?.phaseOffset as number) ?? (i * Math.PI * 2 / this.targets.length);
+        const pos = this.getMovementPosition(this.movementPhase + phaseOffset);
+        if (!pos) continue;
+
+        let { x, y } = pos;
+
+        // 水平移动时使用独立 y 偏移；垂直移动时使用独立 x 偏移
+        if (direction === 'horizontal') {
+          y = target.metadata?.baseY ?? y;
+        } else if (direction === 'vertical') {
+          x = target.metadata?.baseX ?? x;
+        }
+
+        x = Math.max(bounds.xMin, Math.min(bounds.xMax, x));
+        y = Math.max(bounds.yMin, Math.min(bounds.yMax, y));
+
+        target.position.x = x;
+        target.position.y = y;
+        target.position.z = 8;
+      }
+      return;
+    }
+
+    const target = this.targets[0];
 
     if (type === 'random') {
       // 随机移动单独处理（需要目标当前位置状态）
@@ -469,38 +468,123 @@ export class CustomScene extends BaseScene {
     const actualSize = this.config.target.size;
 
     if (this.isStaticType() && display) {
-      // 静态点击类型：使用格子占用追踪（与 GridshotScene 逻辑一致）
+      // 静态点击类型：使用与 GridshotScene 完全一致的格子占用追踪
       const { rows, cols } = display;
       const availableCells = this.getAvailableCells(rows, cols);
 
       if (availableCells.length === 0) return false;
 
-      const [row, col] = availableCells[Math.floor(Math.random() * availableCells.length)];
+      // 随机打乱候选格子，依次尝试找到不重叠的位置
+      for (let i = availableCells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availableCells[i], availableCells[j]] = [availableCells[j], availableCells[i]];
+      }
+
+      // 与 GridshotScene 完全一致的网格计算：14×8 区域
       const cellWidth = 14 / cols;
-      const cellHeight = display.wallHeight / rows;
+      const cellHeight = 8 / rows;
 
-      const x = (col - cols / 2 + 0.5) * cellWidth;
-      const y = row * cellHeight + 2 + cellHeight / 2;
+      for (const [row, col] of availableCells) {
+        const x = (col - cols / 2 + 0.5) * cellWidth;
+        const y = (row + 0.5) * cellHeight + 2;
 
-      const mesh = this.spawnTarget(new BABYLON.Vector3(x, y, 8), actualSize);
-      const cellKey = `${row},${col}`;
-      mesh.metadata = { ...mesh.metadata, cellKey };
-      this.occupiedCells.set(cellKey, mesh);
+        // 检查与所有已存在目标的距离，确保不重叠（间距 >= 目标直径）
+        const minDist = actualSize; // 球心距 >= 直径 = 不重叠
+        let overlaps = false;
+        for (const t of this.targets) {
+          const dx = x - t.position.x;
+          const dy = y - t.position.y;
+          if (Math.sqrt(dx * dx + dy * dy) < minDist) {
+            overlaps = true;
+            break;
+          }
+        }
 
-      return true;
+        if (overlaps) continue; // 该格子太近，尝试下一个
+
+        const mesh = this.spawnTarget(new BABYLON.Vector3(x, y, 8), actualSize);
+        const cellKey = `${row},${col}`;
+        mesh.metadata = { ...mesh.metadata, cellKey };
+        this.occupiedCells.set(cellKey, mesh);
+
+        return true;
+      }
+
+      // 所有候选位置都太近，生成失败
+      return false;
     } else {
       // 运动类型：根据当前运动状态计算正确位置，避免闪烁
-      const pos = this.getMovementPosition(this.movementPhase);
-      const x = pos ? pos.x : bounds.xMin + Math.random() * (bounds.xMax - bounds.xMin);
-      const y = pos ? pos.y : bounds.yMin + Math.random() * (bounds.yMax - bounds.yMin);
-      const position = new BABYLON.Vector3(x, y, 8);
+      const direction = this.config.movement.direction || 'horizontal';
+      const type = this.config.movement.type;
+      const minSpacing = actualSize * 2.5;
 
-      try {
-        this.spawnTarget(position, actualSize);
-        return true;
-      } catch {
-        return false;
+      let x: number, y: number;
+      let phaseOffset: number | undefined;
+
+      if (this.config.category === 'dynamic-clicking' && type === 'linear' && direction === 'horizontal') {
+        // 动态点击 + 水平移动：每个目标分配不同 y 高度和独立相位偏移
+        const rangeY = bounds.yMax - bounds.yMin;
+
+        // 收集已占用的 y 值
+        const occupiedY: number[] = [];
+        for (const t of this.targets) {
+          if (t.metadata?.baseY !== undefined) {
+            occupiedY.push(t.metadata.baseY as number);
+          }
+        }
+
+        // 在范围内均匀分布候选 y 位置
+        const maxTargets = this.config.spawn.maxActive;
+        const candidateYs: number[] = [];
+        const step = rangeY / (maxTargets + 1);
+        for (let i = 1; i <= maxTargets; i++) {
+          candidateYs.push(bounds.yMin + i * step);
+        }
+
+        // 随机打乱候选位置
+        for (let i = candidateYs.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [candidateYs[i], candidateYs[j]] = [candidateYs[j], candidateYs[i]];
+        }
+
+        // 选第一个未被占用且间距足够的
+        let chosenY: number | null = null;
+        for (const cy of candidateYs) {
+          const tooClose = occupiedY.some(oy => Math.abs(cy - oy) < minSpacing);
+          if (!tooClose) {
+            chosenY = cy;
+            break;
+          }
+        }
+
+        if (chosenY === null) {
+          chosenY = bounds.yMin + Math.random() * rangeY;
+        }
+
+        // 预先生成相位偏移，确保初始位置与运动路径一致（避免刷新后闪烁/瞬移）
+        phaseOffset = Math.random() * Math.PI * 2;
+        const pos = this.getMovementPosition(this.movementPhase + phaseOffset);
+        x = pos ? pos.x : (bounds.xMin + bounds.xMax) / 2;
+        y = chosenY;
+      } else {
+        const pos = this.getMovementPosition(this.movementPhase);
+        x = pos ? pos.x : bounds.xMin + Math.random() * (bounds.xMax - bounds.xMin);
+        y = pos ? pos.y : bounds.yMin + Math.random() * (bounds.yMax - bounds.yMin);
       }
+
+      const position = new BABYLON.Vector3(x, y, 8);
+      const mesh = this.spawnTarget(position, actualSize);
+
+      // 动态点击：存储 baseY 和 phaseOffset 用于独立移动
+      if (this.config.category === 'dynamic-clicking' && phaseOffset !== undefined) {
+        mesh.metadata = {
+          ...mesh.metadata,
+          baseY: y,
+          phaseOffset,
+        };
+      }
+
+      return true;
     }
   }
 
@@ -587,7 +671,6 @@ export class CustomScene extends BaseScene {
   dispose() {
     this.occupiedCells.clear();
     this.gridLines.forEach(l => l.dispose());
-    this.trackGuide?.dispose();
     super.dispose();
   }
 }

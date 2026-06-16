@@ -5,6 +5,23 @@ import { useSettingsStore } from '@/stores/settingsStore';
 const MAX_MOUSE_DELTA_PER_EVENT = 60; // 单次 mousemove 最大像素（防指针锁定重获时巨幅跳变）
 const MIN_MOVEMENT_MAG = 0.5;         // 亚像素噪声过滤
 
+export type QualityLevel = 'low' | 'medium' | 'high' | 'ultra';
+
+/** 画质 → 球体分段数映射（分段越少 = 三角面越少 = 性能越高） */
+const QUALITY_SPHERE_SEGMENTS: Record<QualityLevel, number> = {
+  low: 6,
+  medium: 8,
+  high: 12,
+  ultra: 20,
+};
+
+const QUALITY_SCALING: Record<QualityLevel, number> = {
+  low: 2,
+  medium: 1.5,
+  high: 1,
+  ultra: 0.75,
+};
+
 export class GameEngine {
   private canvas: HTMLCanvasElement;
   private engine: BABYLON.Engine;
@@ -12,24 +29,32 @@ export class GameEngine {
   private fps: number = 0;
   private camera: BABYLON.UniversalCamera | null = null;
   private isPointerLocked: boolean = false;
+  private quality: QualityLevel;
 
   private activeController: 'mouse' | 'gamepad' | null = null;
   private lastMouseMoveTime: number = 0;
   private lastGamepadMoveTime: number = 0;
   private cameraControlEnabled: boolean = true;
   private readonly CONTROLLER_IDLE_MS = 250;
-  private readonly GAMEPAD_ACTIVATION_THRESHOLD = 0.08;
 
   // 缓存的鼠标灵敏度，避免每次 mousemove 事件读 Zustand store
   private cachedMouseSensitivity: number = 0;
   private sensitivityCacheTimestamp: number = 0;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, quality: QualityLevel = 'high') {
     this.canvas = canvas;
+    this.quality = quality;
+
+    // 低/中画质关闭 MSAA 抗锯齿以提升帧率
+    const antialias = quality === 'high' || quality === 'ultra';
+    // 低/中画质不按 devicePixelRatio 渲染（始终 1x）
+    const adaptToDeviceRatio = quality === 'high' || quality === 'ultra';
+
     this.engine = new BABYLON.Engine(canvas, true, {
       preserveDrawingBuffer: true,
       stencil: true,
-      antialias: true,
+      antialias,
+      adaptToDeviceRatio,
     });
 
     window.addEventListener('resize', () => this.engine.resize());
@@ -134,7 +159,9 @@ export class GameEngine {
     directionalLight.intensity = 0.3;
 
     this.scene.clearColor = getSceneClearColor();
-    this.engine.setHardwareScalingLevel(1);
+
+    // 应用画质相关的场景设置
+    this.applyQualitySettings();
 
     return this.scene;
   }
@@ -173,6 +200,7 @@ export class GameEngine {
     const settings = useSettingsStore.getState();
     const sensitivity = settings.gamepadSensitivity;
     const invertY = settings.gamepadInvertY ? -1 : 1;
+    const rightDeadzone = settings.rightDeadzone ?? 0.1;
 
     const gamepads = navigator.getGamepads();
     for (const gp of gamepads) {
@@ -183,7 +211,7 @@ export class GameEngine {
       const magnitude = Math.sqrt(rx ** 2 + ry ** 2);
 
       if (this.activeController !== 'gamepad') {
-        if (magnitude < this.GAMEPAD_ACTIVATION_THRESHOLD) return;
+        if (magnitude < rightDeadzone) return;
         if (this.activeController === 'mouse') {
           const mouseIdle = now - this.lastMouseMoveTime > this.CONTROLLER_IDLE_MS;
           if (!mouseIdle) return;
@@ -210,14 +238,33 @@ export class GameEngine {
     }
   }
 
-  setQuality(level: 'low' | 'medium' | 'high' | 'ultra') {
-    const scalingLevels = { low: 2, medium: 1.5, high: 1, ultra: 0.75 };
-    this.engine.setHardwareScalingLevel(scalingLevels[level]);
+  /** 获取当前画质对应的球体分段数（三角面密度） */
+  getQualitySphereSegments(): number {
+    return QUALITY_SPHERE_SEGMENTS[this.quality];
+  }
+
+  /** 应用画质相关的渲染设置 */
+  private applyQualitySettings(): void {
+    // 渲染分辨率缩放：low=2(半分辨率) → ultra=0.75(超采样)
+    const scaling = QUALITY_SCALING[this.quality] ?? 1;
+    this.engine.setHardwareScalingLevel(scaling);
 
     if (this.scene) {
-      this.scene.shadowsEnabled = level !== 'low';
-      this.scene.postProcessesEnabled = level === 'high' || level === 'ultra';
+      // 低画质禁用阴影和后期处理
+      this.scene.shadowsEnabled = this.quality !== 'low';
+      this.scene.postProcessesEnabled = this.quality === 'high' || this.quality === 'ultra';
     }
+  }
+
+  /** 运行时切换画质（供设置页实时预览用） */
+  setQuality(level: QualityLevel): void {
+    this.quality = level;
+    this.applyQualitySettings();
+  }
+
+  /** 获取当前画质等级 */
+  getQuality(): QualityLevel {
+    return this.quality;
   }
 
   getEngine(): BABYLON.Engine {

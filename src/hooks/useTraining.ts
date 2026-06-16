@@ -93,7 +93,8 @@ export function useTraining() {
   }, [taskDurations]);
 
   const createScene = useCallback((task: TrainingTaskConfig, canvas: HTMLCanvasElement): BaseScene => {
-    const engine = new GameEngine(canvas);
+    const quality = useSettingsStore.getState().quality;
+    const engine = new GameEngine(canvas, quality);
     engineRef.current = engine;
 
     const duration = taskDurations[task.id] ?? task.duration;
@@ -257,7 +258,7 @@ export function useTraining() {
   }, [status]);
 
   const resumeTraining = useCallback(() => {
-    if (status === 'paused' && currentTask && sceneRef.current) {
+    if (status === 'paused' && (currentTask || currentCustomTask) && sceneRef.current) {
       startTimeRef.current = performance.now();
 
       let lastTime = startTimeRef.current;
@@ -277,7 +278,9 @@ export function useTraining() {
         const stats = scene.getStats();
 
         const elapsed = now - startTimeRef.current + elapsedBeforePauseRef.current;
-        const duration = taskDurations[currentTask.id] ?? currentTask.duration;
+        const duration = currentTask
+          ? (taskDurations[currentTask.id] ?? currentTask.duration)
+          : (currentCustomTask?.duration ?? 0);
         const remaining = duration > 0 ? Math.max(0, duration - elapsed) : -1;
         const displayTime = duration > 0 ? Math.ceil(remaining / 1000) : -1;
 
@@ -317,7 +320,7 @@ export function useTraining() {
       engineRef.current?.setCameraControlEnabled(true);
       setStatus('playing');
     }
-  }, [status, currentTask, handleTrainingEnd, updateFrameData, taskDurations]);
+  }, [status, currentTask, currentCustomTask, handleTrainingEnd, updateFrameData, taskDurations]);
 
   const stopTraining = useCallback(() => {
     handleTrainingEnd();
@@ -337,7 +340,8 @@ export function useTraining() {
     useGameStore.getState().resetTraining();
 
     try {
-      const engine = new GameEngine(canvas);
+      const quality = useSettingsStore.getState().quality;
+      const engine = new GameEngine(canvas, quality);
       engineRef.current = engine;
 
       const scene = new CustomScene(engine, task, task.id);

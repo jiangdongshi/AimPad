@@ -201,7 +201,7 @@ export class SphereTrackScene extends BaseScene {
   private createTrackingTarget() {
     this.trackingTarget = BABYLON.MeshBuilder.CreateSphere(
       'trackTarget',
-      { diameter: this.config.targetSize, segments: 16 },
+      { diameter: this.config.targetSize, segments: this.qualitySegments },
       this.scene
     );
     this.trackingTarget.position = new BABYLON.Vector3(0, 6, 8);
@@ -243,7 +243,7 @@ export class SphereTrackScene extends BaseScene {
         points.push(new BABYLON.Vector3(
           Math.cos(angle) * radius,
           Math.sin(angle) * (radius * 0.5) + 6,
-          8
+          7.98
         ));
       }
     }

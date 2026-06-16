@@ -22,7 +22,8 @@ export function Settings() {
   const {
     theme,
     locale: localeId,
-    gamepadDeadzone,
+    leftDeadzone,
+    rightDeadzone,
     gamepadSensitivity,
     gamepadInvertY,
     gamepadFireButton,
@@ -200,15 +201,29 @@ export function Settings() {
           <CardContent className="space-y-4">
             <div>
               <label className="block text-sm text-text-secondary mb-2">
-                {locale['settings.gamepad.deadzone']}: {gamepadDeadzone.toFixed(2)}
+                {locale['settings.gamepad.leftDeadzone']}: {leftDeadzone.toFixed(2)}
               </label>
               <input
                 type="range"
                 min="0"
                 max="0.5"
                 step="0.01"
-                value={gamepadDeadzone}
-                onChange={(e) => updateSettings({ gamepadDeadzone: parseFloat(e.target.value) })}
+                value={leftDeadzone}
+                onChange={(e) => updateSettings({ leftDeadzone: parseFloat(e.target.value) })}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-text-secondary mb-2">
+                {locale['settings.gamepad.rightDeadzone']}: {rightDeadzone.toFixed(2)}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="0.5"
+                step="0.01"
+                value={rightDeadzone}
+                onChange={(e) => updateSettings({ rightDeadzone: parseFloat(e.target.value) })}
                 className="w-full"
               />
             </div>
@@ -341,17 +356,46 @@ export function Settings() {
           <CardContent className="space-y-4">
             <div>
               <label className="block text-sm text-text-secondary mb-2">{locale['settings.crosshair.style']}</label>
-              <div className="flex gap-2">
-                {(['dot', 'cross', 'circle'] as const).map((style) => (
+              <div className="flex gap-3">
+                {([
+                  { id: 'dot' as const, label: locale['settings.crosshair.dot'] || 'Dot' },
+                  { id: 'cross' as const, label: locale['settings.crosshair.cross'] || 'Cross' },
+                  { id: 'circle' as const, label: locale['settings.crosshair.circle'] || 'Circle' },
+                ]).map(({ id, label }) => (
                   <button
-                    key={style}
-                    style={crosshairStyle === style
-                      ? { border: '2px solid #2563EB', borderRadius: '12px', padding: '8px 16px', background: 'rgba(37, 99, 235, 0.15)', color: 'var(--tw-text-primary)', fontWeight: 700 }
-                      : { border: '2px solid var(--tw-surface-600)', borderRadius: '12px', padding: '8px 16px', background: 'var(--tw-surface-800)', color: 'var(--tw-text-secondary)' }
-                    }
-                    onClick={() => updateSettings({ crosshairStyle: style })}
+                    key={id}
+                    onClick={() => updateSettings({ crosshairStyle: id })}
+                    className="flex flex-col items-center gap-2 transition-all"
+                    style={{
+                      border: crosshairStyle === id ? '2px solid #2563EB' : '2px solid var(--color-border)',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      background: crosshairStyle === id ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                    }}
                   >
-                    {style}
+                    <div className="w-8 h-8 flex items-center justify-center">
+                      {id === 'dot' && (
+                        <div style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          backgroundColor: crosshairColor,
+                        }} />
+                      )}
+                      {id === 'cross' && (
+                        <div className="relative w-full h-full">
+                          <div className="absolute top-1/2 left-0 w-full h-[1.5px] -translate-y-1/2" style={{ backgroundColor: crosshairColor }} />
+                          <div className="absolute top-0 left-1/2 w-[1.5px] h-full -translate-x-1/2" style={{ backgroundColor: crosshairColor }} />
+                        </div>
+                      )}
+                      {id === 'circle' && (
+                        <div style={{
+                          width: '20px', height: '20px', borderRadius: '50%',
+                          border: `1.5px solid ${crosshairColor}`,
+                        }} />
+                      )}
+                    </div>
+                    <span className="text-xs" style={{ color: crosshairStyle === id ? '#2563EB' : 'var(--color-text-secondary)' }}>
+                      {label}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -400,7 +444,7 @@ export function Settings() {
                     }
                     onClick={() => updateSettings({ quality: q })}
                   >
-                    {q}
+                    {locale[`settings.display.quality.${q}`] || q}
                   </button>
                 ))}
               </div>
