@@ -1,14 +1,11 @@
 import * as BABYLON from '@babylonjs/core';
 import { getSceneClearColor } from '@/utils/themeColors';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { getButtonIndex } from '@/utils/gamepadMap';
-import type { ButtonMapping } from '@/types/gamepad';
 
 const MAX_MOUSE_DELTA_PER_EVENT = 60; // 单次 mousemove 最大像素（防指针锁定重获时巨幅跳变）
 const MIN_MOVEMENT_MAG = 0.5;         // 亚像素噪声过滤
 
 // ───── 控制方式切换阈值 ─────
-const STICK_SWITCH_THRESHOLD = 0.5;        // 鼠标→手柄：左/右摇杆推动幅度 > 50%
 const MOUSE_SWITCH_ACCUM_THRESHOLD = 80;   // 手柄→鼠标：窗口内累计鼠标位移(px)
 const MOUSE_SWITCH_WINDOW_MS = 600;        // 累计鼠标位移的有效窗口，超时归零
 
@@ -39,16 +36,17 @@ export class GameEngine {
   private quality: QualityLevel;
 
   // 当前激活的控制方式（默认鼠标）。切换需满足"大幅输入 + 开火键边沿按下"。
-  private activeController: 'mouse' | 'gamepad' = 'mouse';
+  private activeController: 'mouse' | 'gamepad' | null = 'mouse';
   private cameraControlEnabled: boolean = true;
 
   // 手柄→鼠标：累计鼠标位移 + 时间窗口
   private mouseAccum: number = 0;
   private lastMouseAccumTime: number = 0;
-  // 鼠标→手柄：摇杆是否曾达到阈值（持续条件，开火边沿触发时检查）
-  private gamepadStickArmed: boolean = false;
-  // 开火键边沿检测（用于切换判定，独立于射击逻辑）
-  private prevSwitchFirePressed: boolean = false;
+
+  // 控制方式超时归零：长时间无输入后自动切换
+  private lastMouseMoveTime: number = 0;
+  private lastGamepadMoveTime: number = 0;
+  private readonly CONTROLLER_IDLE_MS = 5000;
 
   // 缓存的鼠标灵敏度，避免每次 mousemove 事件读 Zustand store
   private cachedMouseSensitivity: number = 0;
@@ -129,6 +127,7 @@ export class GameEngine {
       const sensitivity = this.cachedMouseSensitivity || useSettingsStore.getState().mouseSensitivity * 0.002;
 
       // 直接旋转摄像机（同步方式，每个 mousemove 事件立即生效）
+      this.lastMouseMoveTime = now;
       this.camera.rotation.y += clampedDX * sensitivity;
       this.camera.rotation.x += clampedDY * sensitivity;
 
@@ -147,7 +146,6 @@ export class GameEngine {
       if (accumFresh && this.mouseAccum >= MOUSE_SWITCH_ACCUM_THRESHOLD) {
         this.activeController = 'mouse';
         this.mouseAccum = 0;
-        this.gamepadStickArmed = false;
       }
     });
   }
