@@ -280,9 +280,10 @@ export function Admin() {
   const moveHotTaskUp = useAdminConfigStore((s) => s.moveHotTaskUp);
   const moveHotTaskDown = useAdminConfigStore((s) => s.moveHotTaskDown);
 
-  if (!isAuthenticated) return <PasswordGate />;
-
+  // 必须放在 early return 之前——hooks 不能在条件分支后调用
   const { hotTasks } = useTrainingConfig();
+
+  if (!isAuthenticated) return <PasswordGate />;
 
   const tabLabel = (key: AdminTab) => locale[`admin.tab.${key}` as keyof typeof locale] || key;
 
