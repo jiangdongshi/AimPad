@@ -73,13 +73,21 @@ export function TrainingHUD({ hits, misses, timeRemaining, fps, realtimeScore, i
         </div>
       )}
 
-      {/* FPS 显示（追踪模式单独显示） */}
-      {isTrackingMode && fps !== undefined && (
-        <div className="absolute bottom-4 left-4 pointer-events-none z-40">
-          <div className="backdrop-blur-sm rounded-lg px-3 py-1" style={hudBg}>
-            <span className="text-xs text-white/70">{locale['hud.fps']}: </span>
-            <span className="text-sm font-gaming text-white">{fps}</span>
-          </div>
+      {/* 追踪模式底部：目标切换时间模式显示击破数 + 帧率，纯追踪仅显示帧率 */}
+      {isTrackingMode && (
+        <div className="absolute bottom-4 left-4 flex gap-4 pointer-events-none z-40">
+          {hits > 0 && (
+            <div className="backdrop-blur-sm rounded-lg px-3 py-1" style={hudBg}>
+              <span className="text-xs text-white/70">{locale['hud.kills']}: </span>
+              <span className="text-sm font-gaming text-success">{hits}</span>
+            </div>
+          )}
+          {fps !== undefined && (
+            <div className="backdrop-blur-sm rounded-lg px-3 py-1" style={hudBg}>
+              <span className="text-xs text-white/70">{locale['hud.fps']}: </span>
+              <span className="text-sm font-gaming text-white">{fps}</span>
+            </div>
+          )}
         </div>
       )}
     </>

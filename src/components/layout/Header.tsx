@@ -15,6 +15,7 @@ export function Header() {
     { path: '/custom-task', label: locale['nav.customTask'] || 'Custom' },
     { path: '/statistics', label: locale['nav.statistics'] },
     { path: '/settings', label: locale['nav.settings'] },
+    { path: '/admin', label: locale['nav.admin'] || 'Admin' },
   ];
 
   return (

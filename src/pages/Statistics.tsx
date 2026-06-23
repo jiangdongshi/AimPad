@@ -3,8 +3,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useStatistics, useTaskStats } from '@/hooks/useStatistics';
-import { TRAINING_TASKS } from '@/types/training';
-import type { TaskType } from '@/types/training';
+import { useTrainingConfig } from '@/hooks/useTrainingConfig';
+import type { TaskType, TrainingTaskConfig } from '@/types/training';
 import { useCustomTaskStore } from '@/stores/customTaskStore';
 import { useLocale } from '@/hooks/useTheme';
 
@@ -19,8 +19,8 @@ const TASK_TYPE_ORDER: TaskType[] = [
   'reaction',
 ];
 
-function groupTasksByType(tasks: typeof TRAINING_TASKS) {
-  const groups = new Map<TaskType, typeof TRAINING_TASKS>();
+function groupTasksByType(tasks: TrainingTaskConfig[]) {
+  const groups = new Map<TaskType, TrainingTaskConfig[]>();
   for (const type of TASK_TYPE_ORDER) {
     const matched = tasks.filter(t => t.type === type);
     if (matched.length > 0) {
@@ -43,11 +43,12 @@ export function Statistics() {
   const { taskStats, loading: taskLoading } = useTaskStats();
   const customTasks = useCustomTaskStore((s) => s.tasks);
   const locale = useLocale();
+  const { presetTasks } = useTrainingConfig();
 
   // 构建任务名称映射
   const taskNameMap = useMemo(() => {
     const map = new Map<string, string>();
-    TRAINING_TASKS.forEach(t => {
+    presetTasks.forEach(t => {
       map.set(t.id, locale[`task.${t.id}` as keyof typeof locale] || t.name);
     });
     customTasks.forEach(t => {
@@ -57,7 +58,7 @@ export function Statistics() {
   }, [customTasks, locale]);
 
   // 预设任务按类型分组
-  const presetGroups = useMemo(() => groupTasksByType(TRAINING_TASKS), []);
+  const presetGroups = useMemo(() => groupTasksByType(presetTasks), [presetTasks]);
 
   // 自定义任务按类型分组
   const customGroups = useMemo(() => {
@@ -74,7 +75,7 @@ export function Statistics() {
   // 分类筛选后的任务统计（用于底部表格）
   const filteredTaskStats = useMemo(() => {
     if (categoryFilter === 'all') return taskStats;
-    const presetIds = new Set(TRAINING_TASKS.map(t => t.id));
+    const presetIds = new Set(presetTasks.map(t => t.id));
     return taskStats.filter(ts => {
       const isPreset = presetIds.has(ts.taskId);
       return categoryFilter === 'preset' ? isPreset : !isPreset;

@@ -7,6 +7,7 @@ import { Settings } from '@/pages/Settings';
 import { Profile } from '@/pages/Profile';
 import { Gamepad } from '@/pages/Gamepad';
 import { CustomTaskEditor } from '@/pages/CustomTaskEditor';
+import { Admin } from '@/pages/Admin';
 import { useTheme } from '@/hooks/useTheme';
 
 function AppInner() {
@@ -23,6 +24,7 @@ function AppInner() {
           <Route path="profile" element={<Profile />} />
           <Route path="gamepad" element={<Gamepad />} />
           <Route path="custom-task" element={<CustomTaskEditor />} />
+            <Route path="admin" element={<Admin />} />
         </Route>
       </Routes>
     </Router>
