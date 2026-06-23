@@ -57,7 +57,7 @@ const TYPE_DEFAULTS: Record<TaskCategory, {
     maxActive: 5,
     interval: 500,
     lifetime: 0,
-    speed: 0,
+    speed: 3,
     scoring: { weightAccuracy: 0.3, weightSpeed: 0.5, weightConsistency: 0.2 },
   },
   'reaction': {
@@ -516,11 +516,14 @@ export function CustomTaskEditor() {
                     onChange={(e) => updateMovement({ randomLinearRatio: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
                 </div>
               )}
-              <div>
-                <label style={labelStyle}>{locale['custom.randomness'] || '随机度'}: {config.movement.randomness ?? 0}%</label>
-                <input type="range" min="0" max="100" step="5" value={config.movement.randomness ?? 0}
-                  onChange={(e) => updateMovement({ randomness: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
-              </div>
+              {/* 随机度仅在"完全随机"模式下显示；短暂随机通过交替相位实现随机性 */}
+              {config.movement.type === 'random' && (config.movement.randomMode || 'full') === 'full' && (
+                <div>
+                  <label style={labelStyle}>{locale['custom.randomness'] || '随机度'}: {config.movement.randomness ?? 0}%</label>
+                  <input type="range" min="0" max="100" step="5" value={config.movement.randomness ?? 0}
+                    onChange={(e) => updateMovement({ randomness: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+              )}
               <div>
                 <label style={labelStyle}>{locale['custom.hitTimeMs'] || '受击时间'}: {(config.spawn.hitTimeMs || 0) === 0 ? locale['training.duration.unlimited'] : `${config.spawn.hitTimeMs || 0}ms`}</label>
                 <input type="range" min="0" max="10000" step="200" value={config.spawn.hitTimeMs || 0}
@@ -606,7 +609,7 @@ export function CustomTaskEditor() {
               <div>
                 <label style={labelStyle}>{locale['custom.movementType'] || '移动性'}</label>
                 <div className="flex gap-2">
-                  {[{ value: 'static', label: '静态' }, { value: 'linear', label: '移动' }].map(mt => (
+                  {[{ value: 'static', label: '静态' }, { value: 'linear', label: '移动' }, { value: 'random' as MovementType, label: '随机' }].map(mt => (
                     <button key={mt.value} onClick={() => updateMovement({ type: mt.value as MovementType })}
                       className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                       style={{
@@ -619,11 +622,54 @@ export function CustomTaskEditor() {
                   ))}
                 </div>
               </div>
+              {(config.movement.type === 'linear' || config.movement.type === 'random') && (
+                <div>
+                  <label style={labelStyle}>{locale['custom.speed'] || '速度'}: {config.movement.speed.toFixed(1)}</label>
+                  <input type="range" min="1" max="10" step="0.5" value={config.movement.speed}
+                    onChange={(e) => updateMovement({ speed: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+              )}
+              {config.movement.type === 'random' && (
+                <div>
+                  <label style={labelStyle}>{locale['custom.randomMode'] || '随机模式'}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: 'brief' as const, label: locale['custom.randomMode.brief'] || '短暂随机' },
+                      { value: 'full' as const, label: locale['custom.randomMode.full'] || '完全随机' },
+                    ].map(rm => (
+                      <button key={rm.value} onClick={() => updateMovement({ randomMode: rm.value })}
+                        className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                        style={{
+                          backgroundColor: (config.movement.randomMode || 'full') === rm.value ? 'rgba(37, 99, 235, 0.15)' : 'var(--color-bg-surface-hover)',
+                          color: (config.movement.randomMode || 'full') === rm.value ? '#2563EB' : 'var(--color-text-secondary)',
+                          border: (config.movement.randomMode || 'full') === rm.value ? '2px solid #2563EB' : '1px solid var(--color-border)',
+                        }}>
+                        {rm.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {config.movement.type === 'random' && config.movement.randomMode === 'brief' && (
+                <div>
+                  <label style={labelStyle}>{locale['custom.randomLinearRatio'] || '随机/直线 比例'}: {((config.movement.randomLinearRatio ?? 0.5) * 100).toFixed(0)}% / {((1 - (config.movement.randomLinearRatio ?? 0.5)) * 100).toFixed(0)}%</label>
+                  <input type="range" min="0.1" max="0.9" step="0.1" value={config.movement.randomLinearRatio ?? 0.5}
+                    onChange={(e) => updateMovement({ randomLinearRatio: parseFloat(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+              )}
+              {/* 随机度仅在"完全随机"模式下显示 */}
+              {config.movement.type === 'random' && (config.movement.randomMode || 'full') === 'full' && (
+                <div>
+                  <label style={labelStyle}>{locale['custom.randomness'] || '随机度'}: {config.movement.randomness ?? 0}%</label>
+                  <input type="range" min="0" max="100" step="5" value={config.movement.randomness ?? 0}
+                    onChange={(e) => updateMovement({ randomness: parseInt(e.target.value) })} className="w-full" style={{ accentColor: '#2563EB' }} />
+                </div>
+              )}
               {config.movement.type === 'linear' && (
                 <div>
                   <label style={labelStyle}>{locale['custom.direction'] || '运动方向'}</label>
                   <div className="flex flex-wrap gap-2">
-                    {LINEAR_DIRECTIONS.map(d => (
+                    {LINEAR_DIRECTIONS.filter(d => d.value === 'horizontal' || d.value === 'vertical').map(d => (
                       <button key={d.value} onClick={() => updateMovement({ direction: d.value })}
                         className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                         style={{
@@ -637,6 +683,17 @@ export function CustomTaskEditor() {
                   </div>
                 </div>
               )}
+              <div>
+                <label style={labelStyle}>{locale['custom.lifetimeSeconds'] || '目标存在时间'}: {config.spawn.lifetime === 0 ? locale['training.duration.unlimited'] : `${(config.spawn.lifetime / 1000).toFixed(0)}s`}</label>
+                <div className="flex gap-2 items-center">
+                  <input type="range" min="0" max="999" step="1" value={Math.round(config.spawn.lifetime / 1000)}
+                    onChange={(e) => updateSpawn({ lifetime: parseInt(e.target.value) * 1000 })} className="flex-1" style={{ accentColor: '#2563EB' }} />
+                  <input type="number" min="0" max="999" value={Math.round(config.spawn.lifetime / 1000)}
+                    onChange={(e) => updateSpawn({ lifetime: Math.max(0, Math.min(999, parseInt(e.target.value) || 0)) * 1000 })}
+                    className="w-16 px-2 py-1 text-sm rounded-lg text-center"
+                    style={{ backgroundColor: 'var(--color-bg-surface-hover)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }} />
+                </div>
+              </div>
             </CardContent>
           </Card>
         );

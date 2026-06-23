@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { TRAINING_TASKS } from '@/types/training';
+import { useTrainingConfig } from '@/hooks/useTrainingConfig';
 import type { TrainingTaskConfig } from '@/types/training';
 import { useTraining, DURATION_OPTIONS } from '@/hooks/useTraining';
 import { Card } from '@/components/ui/Card';
@@ -45,6 +45,7 @@ export function Training() {
   const tabParam = searchParams.get('tab');
   const locale = useLocale();
   const isZh = useSettingsStore((s) => s.locale) === 'zh';
+  const { presetTasks, getTaskById } = useTrainingConfig();
   const customTasks = useCustomTaskStore((s) => s.tasks);
   const favorites = useCustomTaskStore((s) => s.favorites);
   const toggleFavorite = useCustomTaskStore((s) => s.toggleFavorite);
@@ -92,7 +93,7 @@ export function Training() {
   const pausePhaseRef = useRef<'idle' | 'countdown' | 'resume-countdown' | null>(null); // 暂停时所处阶段
 
   const selectedTask = taskId
-    ? TRAINING_TASKS.find(t => t.id === taskId)
+    ? getTaskById(taskId)
     : null;
 
   const selectedCustomTask = customTaskId
@@ -423,7 +424,7 @@ export function Training() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Preset Tasks Tab */}
-            {activeTab === 'preset' && TRAINING_TASKS.map((task) => (
+            {activeTab === 'preset' && presetTasks.map((task) => (
               <Card key={task.id} hoverable className="h-full">
                 <div className="flex items-start justify-between mb-4">
                   <h3 className="text-xl font-gaming text-text-primary">{locale[`task.${task.id}` as keyof typeof locale] || task.name}</h3>
@@ -536,7 +537,7 @@ export function Training() {
               </div>
             )}
             {activeTab === 'favorites' && favorites.map((favId) => {
-              const presetTask = TRAINING_TASKS.find(t => t.id === favId);
+              const presetTask = getTaskById(favId);
               const customTask = customTasks.find(t => t.id === favId);
               const task = presetTask || customTask;
               if (!task) return null;

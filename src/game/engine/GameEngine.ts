@@ -1,9 +1,16 @@
 import * as BABYLON from '@babylonjs/core';
 import { getSceneClearColor } from '@/utils/themeColors';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { getButtonIndex } from '@/utils/gamepadMap';
+import type { ButtonMapping } from '@/types/gamepad';
 
 const MAX_MOUSE_DELTA_PER_EVENT = 60; // 单次 mousemove 最大像素（防指针锁定重获时巨幅跳变）
 const MIN_MOVEMENT_MAG = 0.5;         // 亚像素噪声过滤
+
+// ───── 控制方式切换阈值 ─────
+const STICK_SWITCH_THRESHOLD = 0.5;        // 鼠标→手柄：左/右摇杆推动幅度 > 50%
+const MOUSE_SWITCH_ACCUM_THRESHOLD = 80;   // 手柄→鼠标：窗口内累计鼠标位移(px)
+const MOUSE_SWITCH_WINDOW_MS = 600;        // 累计鼠标位移的有效窗口，超时归零
 
 export type QualityLevel = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -31,11 +38,17 @@ export class GameEngine {
   private isPointerLocked: boolean = false;
   private quality: QualityLevel;
 
-  private activeController: 'mouse' | 'gamepad' | null = null;
-  private lastMouseMoveTime: number = 0;
-  private lastGamepadMoveTime: number = 0;
+  // 当前激活的控制方式（默认鼠标）。切换需满足"大幅输入 + 开火键边沿按下"。
+  private activeController: 'mouse' | 'gamepad' = 'mouse';
   private cameraControlEnabled: boolean = true;
-  private readonly CONTROLLER_IDLE_MS = 250;
+
+  // 手柄→鼠标：累计鼠标位移 + 时间窗口
+  private mouseAccum: number = 0;
+  private lastMouseAccumTime: number = 0;
+  // 鼠标→手柄：摇杆是否曾达到阈值（持续条件，开火边沿触发时检查）
+  private gamepadStickArmed: boolean = false;
+  // 开火键边沿检测（用于切换判定，独立于射击逻辑）
+  private prevSwitchFirePressed: boolean = false;
 
   // 缓存的鼠标灵敏度，避免每次 mousemove 事件读 Zustand store
   private cachedMouseSensitivity: number = 0;
@@ -91,18 +104,21 @@ export class GameEngine {
 
       const now = performance.now();
 
-      // 手柄活跃时需超过闲置期才允许鼠标接管
-      if (this.activeController === 'gamepad') {
-        const gamepadIdle = now - this.lastGamepadMoveTime > this.CONTROLLER_IDLE_MS;
-        if (!gamepadIdle) return;
-      }
-
-      this.activeController = 'mouse';
-      this.lastMouseMoveTime = now;
-
       // 钳制单次事件增量，防止指针锁定重获时浏览器报告巨幅位移
       const clampedDX = Math.max(-MAX_MOUSE_DELTA_PER_EVENT, Math.min(MAX_MOUSE_DELTA_PER_EVENT, rawDX));
       const clampedDY = Math.max(-MAX_MOUSE_DELTA_PER_EVENT, Math.min(MAX_MOUSE_DELTA_PER_EVENT, rawDY));
+
+      // 当前为手柄控制：累计鼠标位移，达到阈值则"待命"，等待开火键确认切换。
+      // 仅累计移动量，不旋转摄像机（避免手柄控制时鼠标误触）。
+      if (this.activeController === 'gamepad') {
+        // 超出窗口则重置累计（要求一段连续的大幅移动）
+        if (now - this.lastMouseAccumTime > MOUSE_SWITCH_WINDOW_MS) {
+          this.mouseAccum = 0;
+        }
+        this.mouseAccum += Math.abs(clampedDX) + Math.abs(clampedDY);
+        this.lastMouseAccumTime = now;
+        return;
+      }
 
       // 定期刷新缓存的灵敏度（每秒读一次 Zustand store）
       if (now - this.sensitivityCacheTimestamp > 1000) {
@@ -118,6 +134,21 @@ export class GameEngine {
 
       // 垂直视角限制
       this.camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.camera.rotation.x));
+    });
+
+    // 鼠标左键按下 — 当前为手柄控制时，作为切回鼠标的确认信号
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || !this.cameraControlEnabled) return;
+      if (this.activeController !== 'gamepad') return;
+
+      const now = performance.now();
+      // 累计窗口未过期，且累计位移达到阈值 → 切换到鼠标控制
+      const accumFresh = now - this.lastMouseAccumTime <= MOUSE_SWITCH_WINDOW_MS;
+      if (accumFresh && this.mouseAccum >= MOUSE_SWITCH_ACCUM_THRESHOLD) {
+        this.activeController = 'mouse';
+        this.mouseAccum = 0;
+        this.gamepadStickArmed = false;
+      }
     });
   }
 

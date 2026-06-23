@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { TRAINING_TASKS } from '@/types/training';
+import { useTrainingConfig } from '@/hooks/useTrainingConfig';
 import { useLocale } from '@/hooks/useTheme';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 export function Home() {
   const locale = useLocale();
   const isZh = useSettingsStore((s) => s.locale) === 'zh';
+  const { hotTasks } = useTrainingConfig();
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -64,7 +65,7 @@ export function Home() {
           {locale['home.popularTasks']}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {TRAINING_TASKS.slice(0, 6).map((task) => (
+          {hotTasks.length > 0 ? hotTasks.map((task) => (
             <Link key={task.id} to={`/training?task=${task.id}`}>
               <Card hoverable className="h-full">
                 <div className="flex items-start justify-between mb-3">
@@ -78,7 +79,11 @@ export function Home() {
                 </div>
               </Card>
             </Link>
-          ))}
+          )) : (
+            <div className="col-span-full text-center text-text-muted py-8 text-sm">
+              {locale['admin.hot.empty' as keyof typeof locale] || 'No hot tasks configured'}
+            </div>
+          )}
         </div>
       </section>
 

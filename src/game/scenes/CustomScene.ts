@@ -66,6 +66,10 @@ export class CustomScene extends BaseScene {
   private occupiedCells = new Map<string, BABYLON.Mesh>();
   private static readonly SPAWN_COOLDOWN_MS = 50;
 
+  // 被击破目标的运动轴（下次生成时排除）：用目标自身的旧轴而非"上次生成轴"，多目标时语义正确
+  private excludeLaneY: number | null = null;
+  private excludeLaneX: number | null = null;
+
   constructor(engine: GameEngine, config: SceneConfig, taskId?: string) {
     super(engine, taskId || `custom-${Date.now()}`);
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -213,6 +217,17 @@ export class CustomScene extends BaseScene {
   }
 
   protected onTargetHit(mesh: BABYLON.Mesh) {
+    // 目标切换 + 线性移动：仅在本次点击会导致击破时才设 exclude
+    // （必须设在 super.onTargetHit 之前——super 内部调用 onTargetBroken → spawnRandomTarget）
+    if (this.config.category === 'target-switching') {
+      const currentHits = (mesh.metadata?.hitCount as number) ?? 0;
+      if (currentHits + 1 >= this.hitsToBreak) {
+        this.excludeLaneX = (mesh.metadata?.baseX as number | undefined) ?? null;
+        this.excludeLaneY = (mesh.metadata?.baseY as number | undefined) ?? null;
+        console.log('[exclude] HITS mode: set excludeLaneX=%s excludeLaneY=%s from mesh.baseX=%s mesh.baseY=%s',
+          this.excludeLaneX, this.excludeLaneY, mesh.metadata?.baseX, mesh.metadata?.baseY);
+      }
+    }
     // 先记录击中（父类根据 hitsToBreak 决定是否移除目标）
     const cellKey = this.isStaticType() ? (mesh.metadata?.cellKey as string | undefined) : undefined;
     super.onTargetHit(mesh);
@@ -235,6 +250,17 @@ export class CustomScene extends BaseScene {
     // 更新移动目标位置（动态点击和跟踪类型都需要，random 类型也需要）
     if (this.isTrackingType() || this.config.movement.type === 'random') {
       this.updateMovingTarget(deltaTime);
+    }
+
+    // 目标存在时间到期自动移除（lifetime > 0 时启用）
+    if (this.config.spawn.lifetime > 0) {
+      for (let i = this.targets.length - 1; i >= 0; i--) {
+        const target = this.targets[i];
+        const spawnTime = target.metadata?.spawnTime as number | undefined;
+        if (spawnTime && now - spawnTime > this.config.spawn.lifetime) {
+          this.removeTarget(target);
+        }
+      }
     }
 
     // 生成新目标
@@ -265,7 +291,7 @@ export class CustomScene extends BaseScene {
       }
     }
 
-    // 目标切换类型（时间模式）：检测准星落在哪个目标上，累积受击时间
+    // 目标切换类型（时间模式）：准星与目标重合时累积受击时间，到期击破
     if (this.config.category === 'target-switching' && this.breakMode === 'time' && this.targets.length > 0) {
       const renderWidth = this.scene.getEngine().getRenderWidth();
       const renderHeight = this.scene.getEngine().getRenderHeight();
@@ -280,7 +306,29 @@ export class CustomScene extends BaseScene {
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance < threshold) {
-          if (this.checkHitTime(target, deltaTime)) break; // 击破一个就停止检查
+          // 捕获 metadata 字段（checkHitTime → removeTarget → returnTargetToPool 会清空 metadata）
+          const spawnTime = target.metadata?.spawnTime as number | undefined;
+          const cellKey = this.isStaticType() ? (target.metadata?.cellKey as string | undefined) : undefined;
+          const brokenBaseX = target.metadata?.baseX as number | undefined;
+          const brokenBaseY = target.metadata?.baseY as number | undefined;
+          // 提前设 exclude —— checkHitTime 内部会触发 onTargetBroken → spawnRandomTarget
+          if (brokenBaseX !== undefined) this.excludeLaneX = brokenBaseX;
+          if (brokenBaseY !== undefined) this.excludeLaneY = brokenBaseY;
+          console.log('[exclude] TIME mode: set excludeLaneX=%s excludeLaneY=%s from brokenBaseX=%s brokenBaseY=%s',
+            this.excludeLaneX, this.excludeLaneY, brokenBaseX, brokenBaseY);
+          if (this.checkHitTime(target, deltaTime)) {
+            // exclude 已被 spawnRandomTarget 消费
+            // 释放占用的格子，避免新目标无法在该格生成（或误判仍被占）
+            if (cellKey) this.occupiedCells.delete(cellKey);
+            // 时间模式下 checkHitTime 不记录命中，这里手动补充统计
+            this.hits++;
+            this.reactionTimes.push(now - (spawnTime || this.startTime));
+            break;
+          } else {
+            // 未击破（累积时间不足），回退 exclude
+            this.excludeLaneX = null;
+            this.excludeLaneY = null;
+          }
         }
       }
     }
@@ -366,8 +414,8 @@ export class CustomScene extends BaseScene {
 
     this.movementPhase += speed * deltaTime / 1000;
 
-    // 非追踪类型（动态点击）：所有目标各自独立移动，使用不同相位偏移
-    if (this.config.category === 'dynamic-clicking' && type === 'linear') {
+    // 非追踪类型（动态点击、目标切换）：所有目标各自独立移动，使用不同相位偏移
+    if ((this.config.category === 'dynamic-clicking' || this.config.category === 'target-switching') && type === 'linear') {
       const direction = this.config.movement.direction || 'horizontal';
       for (let i = 0; i < this.targets.length; i++) {
         const target = this.targets[i];
@@ -395,8 +443,8 @@ export class CustomScene extends BaseScene {
       return;
     }
 
-    // 动态点击 + 随机：所有目标各自独立随机移动
-    if (this.config.category === 'dynamic-clicking' && type === 'random') {
+    // 动态点击 / 目标切换 + 随机：所有目标各自独立随机移动
+    if ((this.config.category === 'dynamic-clicking' || this.config.category === 'target-switching') && type === 'random') {
       const centerX = (bounds.xMin + bounds.xMax) / 2;
       const centerY = (bounds.yMin + bounds.yMax) / 2;
       const randomMode = this.config.movement.randomMode || 'full';
@@ -486,6 +534,15 @@ export class CustomScene extends BaseScene {
             const wp = pickSeparatedWaypoint(target);
             target.metadata.targetX = wp.wx;
             target.metadata.targetY = wp.wy;
+            target.metadata.waypointSetAt = performance.now();
+          }
+          // 兜底：waypoint 超过 5 秒未到达（可能被边界卡住），强制重选
+          const wpAge = performance.now() - ((target.metadata.waypointSetAt as number) ?? 0);
+          if (wpAge > 5000) {
+            const wp = pickSeparatedWaypoint(target);
+            target.metadata.targetX = wp.wx;
+            target.metadata.targetY = wp.wy;
+            target.metadata.waypointSetAt = performance.now();
           }
           const dx = (target.metadata.targetX as number) - target.position.x;
           const dy = (target.metadata.targetY as number) - target.position.y;
@@ -494,6 +551,7 @@ export class CustomScene extends BaseScene {
             const wp = pickSeparatedWaypoint(target);
             target.metadata.targetX = wp.wx;
             target.metadata.targetY = wp.wy;
+            target.metadata.waypointSetAt = performance.now();
           }
           if (dist > 0.01) {
             target.position.x += (dx / dist) * speed * deltaTime / 500;
@@ -501,20 +559,45 @@ export class CustomScene extends BaseScene {
           }
         }
 
-        // 叠加路径噪声（随机度 > 0 时）
-        if (randomness > 0) {
-          const noiseScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.5;
+        // 完全随机模式：抖动 waypoint 目标点，球始终以设定速度追迹
+        if (randomness > 0 && randomMode === 'full' && target.metadata?.targetX !== undefined) {
+          const jitterScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.08;
           const noiseTime = this.movementPhase + ((target.metadata?.phaseOffset as number) ?? 0);
-          const noiseX = (Math.sin(noiseTime * 1.7 + 0.3) * 0.4 + Math.sin(noiseTime * 3.1 + 1.7) * 0.3 + Math.sin(noiseTime * 5.3 + 2.9) * 0.3) * noiseScale;
-          const noiseY = (Math.sin(noiseTime * 2.3 + 1.1) * 0.4 + Math.sin(noiseTime * 4.7 + 0.5) * 0.3 + Math.sin(noiseTime * 6.1 + 3.7) * 0.3) * noiseScale;
-          target.position.x += noiseX;
-          target.position.y += noiseY;
+          const jx = (Math.sin(noiseTime * 1.7 + 0.3) * 0.4 + Math.sin(noiseTime * 3.1 + 1.7) * 0.3 + Math.sin(noiseTime * 5.3 + 2.9) * 0.3) * jitterScale;
+          const jy = (Math.sin(noiseTime * 2.3 + 1.1) * 0.4 + Math.sin(noiseTime * 4.7 + 0.5) * 0.3 + Math.sin(noiseTime * 6.1 + 3.7) * 0.3) * jitterScale;
+          target.metadata.targetX = Math.max(bounds.xMin, Math.min(bounds.xMax, (target.metadata.targetX as number) + jx));
+          target.metadata.targetY = Math.max(bounds.yMin, Math.min(bounds.yMax, (target.metadata.targetY as number) + jy));
         }
 
         // 限制在边界内
         target.position.x = Math.max(bounds.xMin, Math.min(bounds.xMax, target.position.x));
         target.position.y = Math.max(bounds.yMin, Math.min(bounds.yMax, target.position.y));
         target.position.z = 8;
+      }
+
+      // 碰撞避免：目标间距 < minSeparation 时弹开 waypoint（不修改位置，保持恒速）
+      const minSeparation = targetSize * 1.2;
+      const bounceDist = targetSize * 2.5; // waypoint 弹开距离
+      for (let i = 0; i < this.targets.length; i++) {
+        for (let j = i + 1; j < this.targets.length; j++) {
+          const a = this.targets[i];
+          const b = this.targets[j];
+          const dx = b.position.x - a.position.x;
+          const dy = b.position.y - a.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < minSeparation && dist > 0.001) {
+            const nx = dx / dist;
+            const ny = dy / dist;
+            // 把 a 的 waypoint 弹到远离 b 的方向，钳位在边界内
+            a.metadata.targetX = Math.max(bounds.xMin, Math.min(bounds.xMax, a.position.x - nx * bounceDist));
+            a.metadata.targetY = Math.max(bounds.yMin, Math.min(bounds.yMax, a.position.y - ny * bounceDist));
+            a.metadata.waypointSetAt = performance.now();
+            // 把 b 的 waypoint 弹到远离 a 的方向，钳位在边界内
+            b.metadata.targetX = Math.max(bounds.xMin, Math.min(bounds.xMax, b.position.x + nx * bounceDist));
+            b.metadata.targetY = Math.max(bounds.yMin, Math.min(bounds.yMax, b.position.y + ny * bounceDist));
+            b.metadata.waypointSetAt = performance.now();
+          }
+        }
       }
       return;
     }
@@ -599,14 +682,14 @@ export class CustomScene extends BaseScene {
         }
       }
 
-      // 叠加路径噪声（随机度 > 0 时）
-      if (randomness > 0) {
-        const noiseScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.5;
+      // 完全随机模式：抖动 waypoint 目标点（而非直接改球位置），球始终以设定速度追迹
+      if (randomness > 0 && randomMode === 'full' && target.metadata?.targetX !== undefined) {
+        const jitterScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.08;
         const noiseTime = this.movementPhase;
-        const noiseX = (Math.sin(noiseTime * 1.7 + 0.3) * 0.4 + Math.sin(noiseTime * 3.1 + 1.7) * 0.3 + Math.sin(noiseTime * 5.3 + 2.9) * 0.3) * noiseScale;
-        const noiseY = (Math.sin(noiseTime * 2.3 + 1.1) * 0.4 + Math.sin(noiseTime * 4.7 + 0.5) * 0.3 + Math.sin(noiseTime * 6.1 + 3.7) * 0.3) * noiseScale;
-        target.position.x += noiseX;
-        target.position.y += noiseY;
+        const jx = (Math.sin(noiseTime * 1.7 + 0.3) * 0.4 + Math.sin(noiseTime * 3.1 + 1.7) * 0.3 + Math.sin(noiseTime * 5.3 + 2.9) * 0.3) * jitterScale;
+        const jy = (Math.sin(noiseTime * 2.3 + 1.1) * 0.4 + Math.sin(noiseTime * 4.7 + 0.5) * 0.3 + Math.sin(noiseTime * 6.1 + 3.7) * 0.3) * jitterScale;
+        target.metadata.targetX = Math.max(bounds.xMin, Math.min(bounds.xMax, (target.metadata.targetX as number) + jx));
+        target.metadata.targetY = Math.max(bounds.yMin, Math.min(bounds.yMax, (target.metadata.targetY as number) + jy));
       }
 
       target.position.x = Math.max(bounds.xMin, Math.min(bounds.xMax, target.position.x));
@@ -620,9 +703,9 @@ export class CustomScene extends BaseScene {
 
     let { x, y } = pos;
 
-    // 叠加路径噪声（随机度 > 0 时）
+    // 叠加路径噪声（随机度 > 0 时，系数 0.08 确保噪声速度 ≤25% waypoint 速度）
     if (randomness > 0) {
-      const noiseScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.5;
+      const noiseScale = (randomness / 100) * Math.min(radiusX, radiusY) * 0.08;
       const time = this.movementPhase;
       const noiseX = (Math.sin(time * 1.7 + 0.3) * 0.4 + Math.sin(time * 3.1 + 1.7) * 0.3 + Math.sin(time * 5.3 + 2.9) * 0.3) * noiseScale;
       const noiseY = (Math.sin(time * 2.3 + 1.1) * 0.4 + Math.sin(time * 4.7 + 0.5) * 0.3 + Math.sin(time * 6.1 + 3.7) * 0.3) * noiseScale;
@@ -716,8 +799,8 @@ export class CustomScene extends BaseScene {
       let baseX: number | undefined;
       let baseY: number | undefined;
 
-      if (this.config.category === 'dynamic-clicking' && type === 'linear' && direction === 'horizontal') {
-        // 动态点击 + 水平移动：每个目标分配不同 y 高度和独立相位偏移
+      if ((this.config.category === 'dynamic-clicking' || this.config.category === 'target-switching') && type === 'linear' && direction === 'horizontal') {
+        // 动态点击/目标切换 + 水平移动：每个目标分配不同 y 高度和独立相位偏移
         const rangeY = bounds.yMax - bounds.yMin;
 
         // 收集已占用的 y 值
@@ -729,11 +812,16 @@ export class CustomScene extends BaseScene {
         }
 
         // 在范围内均匀分布候选 y 位置
+        // 车道间距 = minSpacing（非均匀铺满），确保相邻车道目标永不重叠
+        // 车道数 ≥ maxTargets+1，保证击破后总有空余车道可换
         const maxTargets = this.config.spawn.maxActive;
+        const maxFit = Math.max(1, Math.floor(rangeY / minSpacing));
+        const numLanes = Math.min(Math.max(maxTargets + 1, 2), maxFit);
+        const totalSpan = (numLanes - 1) * minSpacing;
+        const startOffset = (rangeY - totalSpan) / 2;
         const candidateYs: number[] = [];
-        const step = rangeY / (maxTargets + 1);
-        for (let i = 1; i <= maxTargets; i++) {
-          candidateYs.push(bounds.yMin + i * step);
+        for (let i = 0; i < numLanes; i++) {
+          candidateYs.push(bounds.yMin + startOffset + i * minSpacing);
         }
 
         // 随机打乱候选位置
@@ -742,19 +830,43 @@ export class CustomScene extends BaseScene {
           [candidateYs[i], candidateYs[j]] = [candidateYs[j], candidateYs[i]];
         }
 
-        // 选第一个未被占用且间距足够的
+        // 选第一个未被占用且间距足够的（同时避开上一次使用的轴，确保击破后换轴）
+        console.log('[spawn] HORIZ: candidates=%s occupied=%s excludeLaneY=%s minSpacing=%s',
+          JSON.stringify(candidateYs), JSON.stringify(occupiedY), this.excludeLaneY, minSpacing);
         let chosenY: number | null = null;
         for (const cy of candidateYs) {
           const tooClose = occupiedY.some(oy => Math.abs(cy - oy) < minSpacing);
-          if (!tooClose) {
+          const sameAsLast = this.excludeLaneY !== null && Math.abs(cy - this.excludeLaneY) < minSpacing;
+          if (!tooClose && !sameAsLast) {
             chosenY = cy;
             break;
+          }
+        }
+
+        // 若所有车道都被排除，放宽：避开现存目标，但仍优先避开 exclude
+        if (chosenY === null) {
+          for (const cy of candidateYs) {
+            if (!occupiedY.some(oy => Math.abs(cy - oy) < minSpacing) &&
+                (this.excludeLaneY === null || Math.abs(cy - this.excludeLaneY) >= minSpacing)) {
+              chosenY = cy;
+              break;
+            }
+          }
+          // 最后兜底：只避开现存目标
+          if (chosenY === null) {
+            for (const cy of candidateYs) {
+              if (!occupiedY.some(oy => Math.abs(cy - oy) < minSpacing)) {
+                chosenY = cy;
+                break;
+              }
+            }
           }
         }
 
         if (chosenY === null) {
           chosenY = bounds.yMin + Math.random() * rangeY;
         }
+        console.log('[spawn] HORIZ: chosenY=%s', chosenY);
 
         // 预先生成相位偏移，确保初始位置与运动路径一致（避免刷新后闪烁/瞬移）
         phaseOffset = Math.random() * Math.PI * 2;
@@ -763,8 +875,8 @@ export class CustomScene extends BaseScene {
         y = chosenY;
         baseY = chosenY;
 
-      } else if (this.config.category === 'dynamic-clicking' && type === 'linear' && direction === 'vertical') {
-        // 动态点击 + 垂直移动：每个目标分配不同 x 位置和独立相位偏移
+      } else if ((this.config.category === 'dynamic-clicking' || this.config.category === 'target-switching') && type === 'linear' && direction === 'vertical') {
+        // 动态点击/目标切换 + 垂直移动：每个目标分配不同 x 位置和独立相位偏移
         const rangeX = bounds.xMax - bounds.xMin;
 
         // 收集已占用的 x 值
@@ -776,11 +888,16 @@ export class CustomScene extends BaseScene {
         }
 
         // 在范围内均匀分布候选 x 位置
+        // 车道间距 = minSpacing（非均匀铺满），确保相邻车道目标永不重叠
+        // 车道数 ≥ maxTargets+1，保证击破后总有空余车道可换
         const maxTargets = this.config.spawn.maxActive;
+        const maxFit = Math.max(1, Math.floor(rangeX / minSpacing));
+        const numLanes = Math.min(Math.max(maxTargets + 1, 2), maxFit);
+        const totalSpan = (numLanes - 1) * minSpacing;
+        const startOffset = (rangeX - totalSpan) / 2;
         const candidateXs: number[] = [];
-        const step = rangeX / (maxTargets + 1);
-        for (let i = 1; i <= maxTargets; i++) {
-          candidateXs.push(bounds.xMin + i * step);
+        for (let i = 0; i < numLanes; i++) {
+          candidateXs.push(bounds.xMin + startOffset + i * minSpacing);
         }
 
         // 随机打乱候选位置
@@ -789,19 +906,43 @@ export class CustomScene extends BaseScene {
           [candidateXs[i], candidateXs[j]] = [candidateXs[j], candidateXs[i]];
         }
 
-        // 选第一个未被占用且间距足够的
+        // 选第一个未被占用且间距足够的（同时避开上一次使用的轴，确保击破后换轴）
+        console.log('[spawn] VERT: candidates=%s occupied=%s excludeLaneX=%s minSpacing=%s',
+          JSON.stringify(candidateXs), JSON.stringify(occupiedX), this.excludeLaneX, minSpacing);
         let chosenX: number | null = null;
         for (const cx of candidateXs) {
           const tooClose = occupiedX.some(ox => Math.abs(cx - ox) < minSpacing);
-          if (!tooClose) {
+          const sameAsLast = this.excludeLaneX !== null && Math.abs(cx - this.excludeLaneX) < minSpacing;
+          if (!tooClose && !sameAsLast) {
             chosenX = cx;
             break;
+          }
+        }
+
+        // 若所有车道都被排除，放宽：避开现存目标，但仍优先避开 exclude
+        if (chosenX === null) {
+          for (const cx of candidateXs) {
+            if (!occupiedX.some(ox => Math.abs(cx - ox) < minSpacing) &&
+                (this.excludeLaneX === null || Math.abs(cx - this.excludeLaneX) >= minSpacing)) {
+              chosenX = cx;
+              break;
+            }
+          }
+          // 最后兜底：只避开现存目标
+          if (chosenX === null) {
+            for (const cx of candidateXs) {
+              if (!occupiedX.some(ox => Math.abs(cx - ox) < minSpacing)) {
+                chosenX = cx;
+                break;
+              }
+            }
           }
         }
 
         if (chosenX === null) {
           chosenX = bounds.xMin + Math.random() * rangeX;
         }
+        console.log('[spawn] VERT: chosenX=%s', chosenX);
 
         // 预先生成相位偏移，确保初始位置与运动路径一致
         phaseOffset = Math.random() * Math.PI * 2;
@@ -880,16 +1021,21 @@ export class CustomScene extends BaseScene {
       const position = new BABYLON.Vector3(x, y, 8);
       const mesh = this.spawnTarget(position, actualSize);
 
-      // 动态点击：存储 baseX/baseY 和 phaseOffset 用于独立移动
-      if (this.config.category === 'dynamic-clicking' && phaseOffset !== undefined) {
+      // 动态点击/目标切换：存储 baseX/baseY 和 phaseOffset 用于独立移动
+      if ((this.config.category === 'dynamic-clicking' || this.config.category === 'target-switching') && phaseOffset !== undefined) {
         mesh.metadata = {
           ...mesh.metadata,
           baseX: baseX ?? x,
           baseY: baseY ?? y,
           phaseOffset,
         };
+        console.log('[spawn] STORED metadata: baseX=%s baseY=%s position=(%s,%s)',
+          mesh.metadata.baseX, mesh.metadata.baseY, x, y);
       }
 
+      // spawn 成功后才消费 exclude（若之前失败，exclude 保留供下次重试）
+      this.excludeLaneX = null;
+      this.excludeLaneY = null;
       return true;
     }
   }
@@ -911,6 +1057,16 @@ export class CustomScene extends BaseScene {
         reactionTimes: [],
         realtimeScore: this.realtimeScore,
         isTracking: true,
+      };
+    }
+    // 目标切换 + 受击时间模式：使用追踪风格的 HUD（隐藏命中率、显示击破数 + 帧数）
+    if (this.config.category === 'target-switching' && this.breakMode === 'time') {
+      return {
+        hits: this.hits,      // 击破目标数
+        misses: 0,
+        reactionTimes: this.reactionTimes,
+        realtimeScore: this.calculateScore(),
+        isTracking: true,     // 复用追踪 HUD 布局
       };
     }
     return super.getStats();

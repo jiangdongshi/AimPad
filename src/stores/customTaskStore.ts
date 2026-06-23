@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CustomTask, SceneConfig } from '@/types/customTask';
 import { encodeShareCode, decodeShareCode } from '@/utils/shareCode';
 
@@ -131,6 +131,38 @@ export const useCustomTaskStore = create<CustomTaskState>()(
     }),
     {
       name: STORAGE_KEY,
+      // 持久化前剥离 shareCode（分享码总是即时从配置重新生成的，无需存储）
+      partialize: (state) => ({
+        ...state,
+        tasks: state.tasks.map(({ shareCode, ...rest }) => rest as CustomTask),
+      }),
+      // 自定义存储层：捕获 QuotaExceededError 防止应用崩溃
+      storage: createJSONStorage(() => ({
+        getItem: (name: string) => {
+          try {
+            return localStorage.getItem(name);
+          } catch {
+            return null;
+          }
+        },
+        setItem: (name: string, value: string) => {
+          try {
+            localStorage.setItem(name, value);
+          } catch (e) {
+            console.warn(
+              `[customTaskStore] localStorage 写入失败（配额已满），当前数据未持久化。请清理部分自定义任务。`,
+              e
+            );
+          }
+        },
+        removeItem: (name: string) => {
+          try {
+            localStorage.removeItem(name);
+          } catch {
+            // 静默忽略
+          }
+        },
+      })),
     }
   )
 );
