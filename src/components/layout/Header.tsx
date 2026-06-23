@@ -3,10 +3,12 @@ import { useLocale } from '@/hooks/useTheme';
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { ProfileMenu } from '@/components/layout/ProfileMenu';
+import { useAdminConfigStore } from '@/stores/adminConfigStore';
 
 export function Header() {
   const location = useLocation();
   const locale = useLocale();
+  const isAdmin = useAdminConfigStore((s) => s.isAuthenticated);
 
   const navItems = [
     { path: '/', label: locale['nav.home'] },
@@ -15,7 +17,7 @@ export function Header() {
     { path: '/custom-task', label: locale['nav.customTask'] || 'Custom' },
     { path: '/statistics', label: locale['nav.statistics'] },
     { path: '/settings', label: locale['nav.settings'] },
-    { path: '/admin', label: locale['nav.admin'] || 'Admin' },
+    ...(isAdmin ? [{ path: '/admin' as const, label: locale['nav.admin'] || 'Admin' }] : []),
   ];
 
   return (
